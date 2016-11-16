@@ -6,7 +6,8 @@
 
 rm(list = ls())
 # libraries
-my.packages <- c("xlsx", "tidyr", "dplyr", "data.table", "ggplot2", "lattice", "optimx", "bbmle", "numDeriv")
+my.packages <- c("xlsx", "tidyr", "dplyr", "data.table", "ggplot2", 
+                 "lattice", "optimx", "bbmle", "numDeriv", "stringr")
 lapply(my.packages, require, character.only = TRUE)
 
 ## Input functions for P1 and P2 equations, 
@@ -46,7 +47,9 @@ r12Data <- dplyr::filter(cmmData, week == 12, trt == "R")
 
 #### Fit models to each of the trt-week combinations
 modelFits <- lapply(levels(cmmData$week.trt), function(x) optimizeCMM(dat = cmmData[cmmData$week.trt == x,], upperConstraint = 64, aiccN = 8))
-saveRDS("modelFits", file = "output/CMM_optimx_model_selection_output.rds")
+saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output.rds")
+
+modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
@@ -80,10 +83,25 @@ testpardat
 
 ## Functions to calculate equilibrium probabilities, P1* and P2* from parameter estimates
 # Equilibrium equations from Equation A12 in Appendix A of Zeilinger et al. (2014)
-
-ProbResults <- data.frame(t(sapply(unique(paramData$week.trt), 
-                                   function(x) ProbEqmc(paramData[paramData$week.trt == x,]), 
-                                   simplify = TRUE)))
+ProbResults <- lapply(unique(paramData$week.trt), function(x) ProbEqmc(paramData[paramData$week.trt == x,]))
+  
+# Add week.trt combination to each element of the list and combine into one data.frame
+for(i in 1:length(ProbResults)){
+  ProbResults[[i]]$week.trt <- levels(cmmData$week.trt)[i]
+} 
+ProbResults <- ProbResults %>% rbindlist() %>% as.data.frame()
+# Restructure data set
+names(ProbResults) <- c("state", "median", "cil", "ciu", "week.trt")
+ProbResults$median <- factor2numeric(ProbResults$median)
+ProbResults$cil <- factor2numeric(ProbResults$cil)
+ProbResults$ciu <- factor2numeric(ProbResults$ciu)
 ProbResults
+
+# Add columns for weeks and treatments, and remove 12.2 week trials
+ProbResults <- dplyr::filter(ProbResults, week.trt != "12.2R" & week.trt != "12.2S")
+ProbResults$week <- ProbResults$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric()
+ProbResults$trt <- ProbResults$week.trt %>% str_extract(., "[aA-zZ]+")
+ProbResults
+
 
 
