@@ -42,14 +42,11 @@ cmmData$N <- with(cmmData, n1 + n2 + n3)
 cmmData$week.trt <- factor(paste(cmmData$week, cmmData$trt, sep = ""))
 
 r12Data <- dplyr::filter(cmmData, week == 12, trt == "R") 
-s3Data <- dplyr::filter(cmmData, week == 3, trt == "S")
-s12Data <- dplyr::filter(cmmData, week == 12, trt == "S")
-s8Data <- dplyr::filter(cmmData, week == 8, trt == "S")
-r8Data <- dplyr::filter(cmmData, week == 8, trt == "R")
 
 
 #### Fit models to each of the trt-week combinations
 modelFits <- lapply(levels(cmmData$week.trt), function(x) optimizeCMM(dat = cmmData[cmmData$week.trt == x,], upperConstraint = 64, aiccN = 8))
+saveRDS("modelFits", file = "output/CMM_optimx_model_selection_output.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
@@ -73,16 +70,9 @@ paramData$se <- sqrt(paramData$variance)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
 
-#########################################################################
-#### Calculating Confidence Intervals using Quadratic approximation
-#########################################################################
-# Method based on description in Bolker (2008) pgs. 196 - 201.
-# Method can only be used if MLE is close to global maximum.
-# If parameter estimates are on or near an inequality constraint (e.g., ~0.0001),
-# then the jackkife method must be used to estimate variance.
-
-
-
+dplyr::filter(paramData, week.trt == "12S" | week.trt == "12R")
+testpardat <- dplyr::filter(paramData, week.trt == "12S")
+testpardat
 
 #####################################################################################
 #### Equilibrial probabilities for stink bug data
@@ -90,32 +80,10 @@ paramData$ciu <- with(paramData, estimate + 1.96*se)
 
 ## Functions to calculate equilibrium probabilities, P1* and P2* from parameter estimates
 # Equilibrium equations from Equation A12 in Appendix A of Zeilinger et al. (2014)
-P1eq.func <- function(params){
-  p1 <- params[1]
-  p2 <- params[2]
-  mu1 <- params[3]
-  mu2 <- params[4]
-  P1eq <- (p1*mu2)/(mu1*p2 + mu2*p1 + mu1*mu2)
-  return(P1eq)
-}
-P2eq.func <- function(params){
-  p1 <- params[1]
-  p2 <- params[2]
-  mu1 <- params[3]
-  mu2 <- params[4]
-  P2eq <- (p2*mu1)/(mu1*p2 + mu2*p1 + mu1*mu2)
-  return(P2eq)
-}
 
-# S12
-params12S <- paramData[paramData$week.trt == "12S", "estimate"]
-P1eq.func(params12S) # P1 equilibrium
-P2eq.func(params12S) # P2 equilibrium
-
-# R12
-params12R <- paramData[paramData$week.trt == "12R", "estimate"]
-P1eq.func(params12R) # P1 equilibrium
-P2eq.func(params12R) # P2 equilibrium
-
+ProbResults <- data.frame(t(sapply(unique(paramData$week.trt), 
+                                   function(x) ProbEqmc(paramData[paramData$week.trt == x,]), 
+                                   simplify = TRUE)))
+ProbResults
 
 
