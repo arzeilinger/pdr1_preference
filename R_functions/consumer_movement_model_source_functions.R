@@ -340,37 +340,38 @@ mleTable <- function(resultsList = resultsList){
 
 ############################################################################################################
 #### Function to average results of good models
-# Good model likelihoods and weights
-# averageModels <- function(modelResults = modelResults, dAIC.threshold = 7){
-#   # modelResults should be a data.frame with a column for each parameter and dAIC
-#   # calculations appended to original data.frame
-#   tml <- sum(exp(-modelResults$dAICc/2)) # Total marginal likelihood; requires all models in selection procedure
-#   # Select only good models
-#   goodModels <- modelResults[modelResults$dAICc <= dAIC.threshold, "model"]
-#   modelResults$gml <- exp(-modelResults$dAICc/2) # Relative or marginal likelihoods for each model
-#   modelResults$wts <- modelResults$gml/tml # Calculate relative weights for each model
-#   parNames <- c("p1", "p2", "mu1", "mu2")
-#   modelAv <- function(x){
-#     par.name <- x
-#     var.name <- paste(par.name, "var", sep = "")
-#     parAv <- sum(modelResults$wts*modelResults[,par.name])
-#     var <- gmd[,c(var.name)]^2
-#     varAv <- sum(gmd$wts*(var + (gmd[,c(par.name)] - parAv)^2))
-#     return(c(parAv, varAv, par.name))
-#   }
-#   
-# }
-# 
-# parNames <- names(coef(op.list$op.free))
-# 
-# modelAv <- function(x){
-#   par.name <- x
-#   var.name <- paste(par.name, "sd", sep = "")
-#   parAv <- sum(gmd$wts*gmd[,c(par.name)])
-#   var <- gmd[,c(var.name)]^2
-#   varAv <- sum(gmd$wts*(var + (gmd[,c(par.name)] - parAv)^2))
-#   return(c(parAv, varAv, par.name))
-# }
+averageModels <- function(modelResults = modelResults, dAIC.threshold = 7){
+  # modelResults should be a data.frame with a column for each parameter and dAIC
+  # calculations appended to original data.frame
+  tml <- sum(exp(-modelResults$dAICc/2)) # Total marginal likelihood; requires all models in selection procedure
+  # Select only good models
+  goodModels <- modelResults[modelResults$dAICc <= dAIC.threshold, ]
+  goodModels$gml <- exp(-goodModels$dAICc/2) # Relative or marginal likelihoods for each model
+  goodModels$wts <- goodModels$gml/tml # Calculate relative weights for each model
+  parNames <- c("p1", "p2", "mu1", "mu2")
+  modelAverageFunction <- function(x){
+    par.name <- x
+    var.name <- paste(par.name, "var", sep = "")
+    parAv <- sum(goodModels$wts*goodModels[,par.name])
+    var <- goodModels[,c(var.name)]
+    varAv <- sum(goodModels$wts*(var + (goodModels[,par.name] - parAv)^2))
+    return(c(par.name, parAv, varAv))
+  }
+  modelAverage <- parNames %>% sapply(., modelAverageFunction, simplify = TRUE) %>% t() %>% as.data.frame()
+  names(modelAverage) <- c("parameter", "estimate", "variance")
+  return(modelAverage)
+}
+
+parNames <- names(coef(op.list$op.free))
+
+modelAv <- function(x){
+  par.name <- x
+  var.name <- paste(par.name, "sd", sep = "")
+  parAv <- sum(gmd$wts*gmd[,c(par.name)])
+  var <- gmd[,c(var.name)]^2
+  varAv <- sum(gmd$wts*(var + (gmd[,c(par.name)] - parAv)^2))
+  return(c(parAv, varAv, par.name))
+}
 
 #################################################################################################
 ####  Gradient function for Conditional Probability models NLL function
