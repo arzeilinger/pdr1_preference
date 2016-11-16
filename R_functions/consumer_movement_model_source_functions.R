@@ -10,6 +10,12 @@ aicc <- function(k, L, n){
 }
 
 
+#### Function to convert factor variable to numeric
+factor2numeric <- function(factorx){
+  numx <- as.numeric(levels(factorx))[factorx]
+  return(numx)
+}
+
 #### Probability models as functions
 P1.func <- function(p1, p2, mu1, mu2, tau, N, n1m1, n2m1){
   # P1 equation as developed in Appendix A
@@ -181,6 +187,10 @@ NLL.choice <- function(par = pars, y = dat){
 }
 
 
+#### List of the NLL functions
+NLLlist <- list(NLL.fixed, NLL.p.choice, NLL.mu.choice, NLL.choice)
+names(NLLlist) <- c("fixed", "p.choice", "mu.choice", "choice")
+
 
 #################################################################################################
 #### Function to fit data to each model variant and perform model selection with AIC
@@ -188,6 +198,7 @@ optimizeCMM <- function(dat = dat, lowerConstraint = 0.0001, upperConstraint = 1
   # lowerConstraint = lower inequality constraint for optimizer
   # upperConstraint = upper inequality constraint for optimizer
   # aiccN = N for AICc (corrected for small sample size)
+  assign("dat", dat, envir = .GlobalEnv)
   ## Fixed Model Optimization
   op.fixed <- optimx(par = runif(2, lowerConstraint, upperConstraint), # define starting parameter values, randomly chosen from uniform distribution
                      fn = NLL.fixed, y = dat, # define NLL function and data set
@@ -242,39 +253,124 @@ optimizeCMM <- function(dat = dat, lowerConstraint = 0.0001, upperConstraint = 1
   aic.comp$dAICc <- abs(min(aic.comp$AICc) - aic.comp$AICc)
   # Sort AIC results from lowest to highest dAIC
   modelSelect <- aic.comp[order(aic.comp$dAICc),]
-  return(list(op.list, modelSelect))
+  resultsList <- list(op.list, modelSelect)
+  names(resultsList) <- c("op.list", "modelSelect")
+  return(resultsList)
+}
+
+
+
+#### Function to extract Hessian matrix of best model and look at inter-parameter correlations
+getParCorrelations <- function(resultsList = resultsList){
+  # resultsList is a list of optimx model fits and model selection, returned from optimizeCMM()
+  op.list <- resultsList$op.list
+  modelSelect <- resultsList$modelSelect
+  # Extract the best model and fitted model object
+  bestModelName <- modelSelect[modelSelect$dAICc == 0, "model"]
+  bestModelFit <- op.list[[which(names(op.list) == bestModelName)]]
+  # Extract parameter estimates into a vector
+  bestParams <- bestModelFit[,grep("p", names(bestModelFit))] %>% as.numeric()
+  # Extract NLL function from NLLlist, which has the same names as modelSelect and op.list
+  nllFunction <- NLLlist[[which(names(NLLlist) == bestModelName)]]
+  # Use hessian() from numDeriv package because the Hessian returned by optimx() a weird list object
+  Hessian <- hessian(func = nllFunction, x = bestParams)
+  # Calculate variance-covariance matrix
+  vcovMatrix <- Hessian %>% solve()
+  # Calculate correlation matrix; should have 1's along diagonal
+  corMatrix <- vcovMatrix %>% cov2cor()
+  output <- list(bestModelName, vcovMatrix, corMatrix)
+  names(output) <- c("bestModelName", "vcovMatrix", "corMatrix")
+  return(output)
 }
 
 
 
 ##########################################################################################
 #### Function to extract parameter estimates and NLL values and construct data.frame
-mleTable <- function(op.list = op.list, modelSelect = modelSelect, dAIC.threshold = 7){
-  goodModels <- modelSelect[modelSelect$dAICc <= dAIC.threshold, "model"]
-  goodOpList <- lapply(goodModels, function(x) op.list[[which(names(op.list) == x)]])
-  names(goodOpList) <- goodModels
+mleTable <- function(resultsList = resultsList){
+  # resultsList is a list of optimx model fits and model selection, returned from optimizeCMM()
+  op.list <- resultsList$op.list
+  modelSelect <- resultsList$modelSelect
+  # Select all models included in selection procedure
+  models <- modelSelect[, "model"]
+  opList <- lapply(models, function(x) op.list[[which(names(op.list) == x)]])
+  names(opList) <- models
   extractFromList <- function(x){
-    # Select parameter estimates for each parameter of the model
-    model <- goodOpList[[x]]
-    model.name <- names(goodOpList)[x]
-    if(model.name == "fixed")
-        p <- as.numeric(model[,c("p1","p1","p2","p2")]) else
-        if(model.name == "p.choice")
-            p <- as.numeric(model[,c("p1","p2","p3","p3")]) else
-            if(model.name == "mu.choice") 
-                p <- as.numeric(model[,c("p1","p1","p2","p3")]) else
+    # p is a vector of estimates for each parameter of the full model
+    # var is the variance extracted from the Hessian/obvserved information matrix
+    # varfull is a vector of the variances for each parameter in the full model
+    model <- opList[[x]]
+    model.name <- names(opList)[x]
+    if(model.name == "fixed") {
+        p <- as.numeric(model[,c("p1","p1","p2","p2")]) 
+        var <- hessian(func = NLLlist$fixed, x = as.numeric(model[,grep("p",names(model))])) %>% solve() %>% diag()
+        varfull <- c(var[1], var[1], var[2], var[2])
+    } else {
+        if(model.name == "p.choice") {
+            p <- as.numeric(model[,c("p1","p2","p3","p3")]) 
+            var <- hessian(func = NLLlist$p.choice, x = as.numeric(model[,grep("p",names(model))])) %>% solve() %>% diag()
+            varfull <- c(var[1], var[2], var[3], var[3])
+        } else {
+            if(model.name == "mu.choice") {
+                p <- as.numeric(model[,c("p1","p1","p2","p3")]) 
+                var <- hessian(func = NLLlist$mu.choice, x = as.numeric(model[,grep("p",names(model))])) %>% solve() %>% diag()
+                varfull <- c(var[1], var[1], var[2], var[3])
+            } else {
                 p <- as.numeric(model[,c("p1","p2","p3","p4")]) # Estimates for Free Choice Model
+                var <- hessian(func = NLLlist$choice, x = as.numeric(model[,grep("p",names(model))])) %>% solve() %>% diag()
+                varfull <- c(var[1], var[2], var[3], var[4])
+            }}}
     NLL <- model$value # Negative Log Likelihood estimate
-    return(c(model.name, p, NLL))
+    return(c(model.name, p, varfull, NLL))
   }
-  moddat <- as.data.frame(t(sapply(1:length(goodOpList), extractFromList, simplify = TRUE)))
-  names(moddat) <- c("p1", "p2", "mu1", "mu2", "NLL", "model")
-  moddat$AICc <- modelSelect$AICc[modelSelect$dAICc <= dAIC.threshold]
-  moddat$dAICc <- modelSelect$dAICc[modelSelect$dAICc <= dAIC.threshold]
-  moddat$df <- modelSelect$df[modelSelect$dAICc <= dAIC.threshold]
+  moddat <- as.data.frame(t(sapply(1:length(opList), extractFromList, simplify = TRUE)))
+  names(moddat) <- c("model", "p1", "p2", "mu1", "mu2", "p1var", "p2var", "mu1var", "mu2var", "NLL")
+  moddat$AICc <- modelSelect$AICc
+  moddat$dAICc <- modelSelect$dAICc
+  # Convert factor variables to numeric variables
+  moddat$model <- as.character(moddat$model)
+  factors <- which(sapply(1:ncol(moddat), function(x) is.factor(moddat[,x]), simplify = TRUE))
+  for(i in factors){
+    moddat[,i] <- factor2numeric(moddat[,i])
+  }
   return(moddat)
 }
 
+
+
+############################################################################################################
+#### Function to average results of good models
+# Good model likelihoods and weights
+# averageModels <- function(modelResults = modelResults, dAIC.threshold = 7){
+#   # modelResults should be a data.frame with a column for each parameter and dAIC
+#   # calculations appended to original data.frame
+#   tml <- sum(exp(-modelResults$dAICc/2)) # Total marginal likelihood; requires all models in selection procedure
+#   # Select only good models
+#   goodModels <- modelResults[modelResults$dAICc <= dAIC.threshold, "model"]
+#   modelResults$gml <- exp(-modelResults$dAICc/2) # Relative or marginal likelihoods for each model
+#   modelResults$wts <- modelResults$gml/tml # Calculate relative weights for each model
+#   parNames <- c("p1", "p2", "mu1", "mu2")
+#   modelAv <- function(x){
+#     par.name <- x
+#     var.name <- paste(par.name, "var", sep = "")
+#     parAv <- sum(modelResults$wts*modelResults[,par.name])
+#     var <- gmd[,c(var.name)]^2
+#     varAv <- sum(gmd$wts*(var + (gmd[,c(par.name)] - parAv)^2))
+#     return(c(parAv, varAv, par.name))
+#   }
+#   
+# }
+# 
+# parNames <- names(coef(op.list$op.free))
+# 
+# modelAv <- function(x){
+#   par.name <- x
+#   var.name <- paste(par.name, "sd", sep = "")
+#   parAv <- sum(gmd$wts*gmd[,c(par.name)])
+#   var <- gmd[,c(var.name)]^2
+#   varAv <- sum(gmd$wts*(var + (gmd[,c(par.name)] - parAv)^2))
+#   return(c(parAv, varAv, par.name))
+# }
 
 #################################################################################################
 ####  Gradient function for Conditional Probability models NLL function
