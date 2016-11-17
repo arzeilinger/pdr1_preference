@@ -30,6 +30,11 @@ prefdata <- prefdata[,1:12]
 prefdata$cage <- paste(prefdata$trt, prefdata$rep, sep = "")
 head(prefdata)
 
+# Checking out weirdness in S3 trial data
+s3prefdata <- dplyr::filter(prefdata, week == 3, trt == "S")
+dplyr::filter(s3prefdata, time_from_start_hr == 1 | time_from_start_hr == 2)
+
+
 #### Calculate total counts among cages for each week, genotype, and time point
 # n1 = source plant (Xylella infected)
 # n2 = test plant
@@ -45,6 +50,7 @@ cmmData$N <- with(cmmData, n1 + n2 + n3)
 cmmData$week.trt <- factor(paste(cmmData$week, cmmData$trt, sep = ""))
 
 r12Data <- dplyr::filter(cmmData, week == 12, trt == "R") 
+dplyr::filter(cmmData, week == 3)
 
 
 #### Fit models to each of the trt-week combinations
@@ -52,12 +58,12 @@ modelFits <- lapply(levels(cmmData$week.trt), function(x) optimizeCMM(dat = cmmD
 names(modelFits) <- levels(cmmData$week.trt)
 saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output.rds")
 
-modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
+#modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
 
-#### Extract and organize parameter estimates from all good models (dAICc <= 7)
+#### Extract and organize parameter estimates from all models
 paramResults <- lapply(modelFits, mleTable)
 
 #### Average results for all good models
@@ -98,7 +104,7 @@ plotPars$choice <- plotPars$parameter %>% str_extract(., "[0-9]+") %>% as.numeri
 plotPars$latticegroups <- with(plotPars, paste(trt, choice, sep=" ")) %>% factor()
 plotPars
 
-write.csv("plotPars", file = "results/pdr1_cmm_rate_parameter_estimates.csv", row.names = FALSE)
+write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates.csv", row.names = FALSE)
 
 # Create dummy x variable to space out points
 adj <- c(-0.5, -0.25, 0.25, 0.5)
@@ -112,40 +118,41 @@ for(i in 1:length(levels(plotPars$latticegroups))){
 
 
 # Rate parameter plots together
-tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
-  plot.new()
-  with(plotPars,
-       xyplot(estimate ~ dummyx|rate, groups = latticegroups,
-              ly = cil, uy = ciu,
-              scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free"),
-                            # x = list(limits = c(0.85, 5), at = c(2, 4), 
-                            #          labels = list(c("",""), c("",""), c("Damaged", "Undamaged"), c("Damaged", "Undamaged"))),
-                            # y = list(limits = list(c(0, 1.2), c(0, 0.6), 
-                            #                        c(0, 0.3), c(0, 0.15)),
-                            #          at = list(seq(0, 1.2, by = 0.4), seq(0, 0.6, by = 0.2),
-                            #                    seq(0, 0.3, by = 0.1), seq(0, 0.15, by = 0.05)),
-                            #          labels = list(seq(0, 1.2, by = 0.4), seq(0, 0.6, by = 0.2),
-                            #                        seq(0, 0.3, by = 0.1), seq(0, 0.15, by = 0.05)))),
-              xlab = list("Plant choice", cex = 1.2), 
-              #ylab = list(expression("Leaving rate "(individuals^{"  "}*hr^{-1})*"        Attraction rate "(individuals^{"  "}*hr^{-1})),
-              ylab = list(expression("Leaving rate "(hr^{-1})*"                       Attraction rate "(hr^{-1})),
-                          cex = 1.2),
-              layout = c(1,2), as.table = TRUE, strip = TRUE, pch = c(19, 1, 17, 2),
-              type = 'p', cex = 1.2, col = "black", 
-              key = list(x = 0.55, y = 0.55, corner = c(0,0),
-                         text = list(lab = levels(latticegroups)), 
-                         points = list(pch = c(19, 1, 17, 2), col = "black")), 
-              prepanel = prepanel.ci,                      
-              panel = function(x, y, ...) {                
-                panel.abline(v = unique(as.numeric(x)),  
-                             col = "white")              
-                panel.superpose(x, y, ...)               
-              },                                          
-              panel.groups = panel.ci))                    
-  # ltext(165, 9, "2009", cex = 1.3)
-  # ltext(380, 9, "2010", cex = 1.3)
-  # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
-  # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+#tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
+     # width = 76*2, height = 76, units = "mm", 
+     # res = 600, compression = "lzw")
+#  plot.new()
+parameter_plot <-  with(plotPars,
+                        xyplot(estimate ~ dummyx|rate, groups = latticegroups,
+                               ly = cil, uy = ciu,
+                               scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free",
+                                             x = list(limits = c(0, 13), at = c(3,8,12),
+                                                      labels = list(c("","", ""), c(3,8,12))),
+                                             y = list(limits = list(c(0, 3), c(0, 0.6)),
+                                                      at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
+                                                      labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
+                               xlab = list("Weeks post-inoculation", cex = 1.2), 
+                               ylab = list(expression("Leaving rate "(hr^{-1})*"                          Attraction rate "(hr^{-1})),
+                                           cex = 1.2),
+                               layout = c(1,2), as.table = TRUE, strip = FALSE, pch = c(19, 1, 17, 2),
+                               type = 'p', cex = 1.2, col = "black", 
+                               key = list(x = 0.4, y = 0.85, corner = c(0,0),
+                                          text = list(lab = levels(latticegroups)), 
+                                          points = list(pch = c(19, 1, 17, 2), col = "black")), 
+                               prepanel = prepanel.ci,                      
+                               panel = function(x, y, ...) {                
+                                 panel.abline(v = unique(as.numeric(x)),  
+                                              col = "white")              
+                                 panel.superpose(x, y, ...)               
+                               },                                          
+                               panel.groups = panel.ci))                    
+                # ltext(165, 9, "2009", cex = 1.3)
+                # ltext(380, 9, "2010", cex = 1.3)
+                # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
+                # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+
+trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
+  print(parameter_plot)
 dev.off()
 
 
@@ -171,13 +178,109 @@ names(ProbResults) <- c("state", "median", "cil", "ciu", "week.trt")
 ProbResults$median <- factor2numeric(ProbResults$median)
 ProbResults$cil <- factor2numeric(ProbResults$cil)
 ProbResults$ciu <- factor2numeric(ProbResults$ciu)
-ProbResults
 
 # Add columns for weeks and treatments, and remove 12.2 week trials
-ProbResults <- dplyr::filter(ProbResults, week.trt != "12.2R" & week.trt != "12.2S")
-ProbResults$week <- ProbResults$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric()
-ProbResults$trt <- ProbResults$week.trt %>% str_extract(., "[aA-zZ]+")
-ProbResults
+plotProbs <- dplyr::filter(ProbResults, week.trt != "12.2R" & week.trt != "12.2S")
+plotProbs$week <- plotProbs$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric()
+plotProbs$trt <- plotProbs$week.trt %>% str_extract(., "[aA-zZ]+")
+# Split parameter into rate and choice columns, and replace values with more meaningful terms
+plotProbs$choice <- plotProbs$state %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
+  gsub(1, "infected", ., fixed = TRUE) %>%
+  gsub(2, "Xf-free", ., fixed = TRUE)
+plotProbs$latticegroups <- with(plotProbs, paste(trt, choice, sep=" ")) %>% factor()
+plotProbs
+
+write.csv(plotProbs, file = "results/pdr1_cmm_equilibrial_probabilities.csv", row.names = FALSE)
+
+# Create dummy x variable to space out points
+adj <- c(-0.5, -0.25, 0.25, 0.5)
+plotProbs$dummyx <- 0
+for(i in 1:length(levels(plotProbs$latticegroups))){
+  group.i <- levels(plotProbs$latticegroups)[i]
+  data.i <- which(plotProbs$latticegroups == group.i)
+  adj.i <- adj[i]
+  plotProbs$dummyx[data.i] <- plotProbs[plotProbs$latticegroups == group.i,"week"] + adj.i
+}
+
+
+# Rate parameter plots together
+#tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
+# width = 76*2, height = 76, units = "mm", 
+# res = 600, compression = "lzw")
+#  plot.new()
+probabilities_plot <-  with(plotProbs,
+                          xyplot(median ~ dummyx, groups = latticegroups,
+                                 ly = cil, uy = ciu,
+                                 scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free"),
+                                               # x = list(limits = c(0, 13), at = c(3,8,12),
+                                               #          labels = list(c("","", ""), c(3,8,12))),
+                                               # y = list(limits = list(c(0, 3), c(0, 0.6)),
+                                               #          at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
+                                               #          labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
+                                 xlab = list("Weeks post-inoculation", cex = 1.2), 
+                                 ylab = list("Equilibrial probability", cex = 1.2),
+                                 layout = c(1,1), as.table = TRUE, strip = FALSE, pch = c(19, 1, 17, 2),
+                                 type = 'p', cex = 1.2, col = "black", 
+                                 key = list(x = 0.4, y = 0.85, corner = c(0,0),
+                                            text = list(lab = levels(latticegroups)), 
+                                            points = list(pch = c(19, 1, 17, 2), col = "black")), 
+                                 prepanel = prepanel.ci,                      
+                                 panel = function(x, y, ...) {                
+                                   panel.abline(v = unique(as.numeric(x)),  
+                                                col = "white")              
+                                   panel.superpose(x, y, ...)               
+                                 },                                          
+                                 panel.groups = panel.ci))                    
+# ltext(165, 9, "2009", cex = 1.3)
+# ltext(380, 9, "2010", cex = 1.3)
+# mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
+# mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+
+trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_equilibrial_probabilities_plot.tif")
+  print(probabilities_plot)
+dev.off()
 
 
 
+##########################################################################################################
+#### Estimating rate parameters for each preference cage
+#### To be used in logistic regression model for transmission
+#### Only using the best estimates for each cage; not sure how to incorporate variance
+
+
+# Checking out weirdness in S3 trial data
+s3prefdata <- dplyr::filter(prefdata, week == 3, trt == "S")
+dplyr::filter(s3prefdata, time_from_start_hr == 1 | time_from_start_hr == 2)
+s3prefdata
+
+# Add identifier column for each cage
+cmmDataCage <- data.frame("t" = prefdata$time_from_start_hr,
+                          "n1" = prefdata$source_plant,
+                          "n2" = prefdata$test_plant,
+                          "n3" = prefdata$neutral_space,
+                          "N" = with(prefdata, source_plant + test_plant + neutral_space),
+                          "week.cage" = factor(paste(prefdata$week, prefdata$cage, sep = "")))
+length(levels(cmmDataCage$week.cage))
+head(cmmDataCage)
+
+
+#### Fit models to each of the trt-week combinations
+modelFitsCage <- lapply(levels(cmmDataCage$week.cage), function(x) optimizeCMM(dat = cmmDataCage[cmmDataCage$week.cage == x,], upperConstraint = 8, aiccN = 8))
+names(modelFitsCage) <- levels(cmmDataCage$week.cage)
+saveRDS(modelFitsCage, file = "output/CMM_optimx_model_selection_output_per_cage.rds")
+
+#modelFits <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
+
+#### Extract and organize parameter estimates from all models
+paramResultsCage <- lapply(modelFitsCage, mleTable)
+
+#### Average results for all good models
+paramAverageCage <- lapply(paramResultsCage, function(x) averageModels(x, dAIC.threshold = 7))
+
+# Add week.trt combination to each element of the list and combine into one data.frame
+for(i in 1:length(paramAverageCage)){
+  paramAverageCage[[i]]$week.cage <- levels(cmmDataCage$week.cage)[i]
+} 
+paramDataCage <- rbindlist(paramAverageCage) %>% as.data.frame()
+paramDataCage$estimate <- factor2numeric(paramDataCage$estimate)
+paramDataCage$variance <- factor2numeric(paramDataCage$variance)
