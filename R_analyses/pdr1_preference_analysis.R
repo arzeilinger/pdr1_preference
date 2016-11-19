@@ -93,3 +93,4 @@ percBugsPrefplot <- ggplot(data=meanPropSource, aes(x=week, y=mean.perc)) +
 ggsave("output/figures/prefplot.jpg", plot = percBugsPrefplot,
        width = 7, height=7, units="in")
 percBugsPrefplot
+
