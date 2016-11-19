@@ -7,7 +7,7 @@
 rm(list = ls())
 # libraries
 # loading dtplyr that replaces dplyr and data.table
-my.packages <- c("xlsx", "tidyr", "dtplyr", "ggplot2", 
+my.packages <- c("xlsx", "tidyr", "dplyr", "ggplot2", "data.table",
                  "lattice", "optimx", "bbmle", "numDeriv", "stringr")
 lapply(my.packages, require, character.only = TRUE)
 
@@ -17,6 +17,11 @@ lapply(my.packages, require, character.only = TRUE)
 source("R_functions/consumer_movement_model_source_functions.R")
 # Plotting functions using lattice
 source("R_functions/lattice_plotting_functions.R")
+# factor2numeric() function
+source("R_functions/factor2numeric.R")
+# NLL gradient functions
+source("R_functions/cmm_gradient_functions.R")
+
 
 ###################################################################################################
 #### Importing data 
@@ -272,10 +277,16 @@ saveRDS(modelFitsCage, file = "output/CMM_optimx_model_selection_output_per_cage
 #modelFits <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
 
 #### Extract and organize parameter estimates from all models
+paramResultsCage <- lapply(modelFitsCage, function(x) tryCatch(mleTable(x), error = function(e) NA))
 paramResultsCage <- lapply(modelFitsCage, mleTable)
 
 #### Average results for all good models
-paramAverageCage <- lapply(paramResultsCage, function(x) averageModels(x, dAIC.threshold = 7))
+paramAverageCage <- lapply(paramResultsCage, function(x) tryCatch(averageModels(x, dAIC.threshold = 7), error = function(e) NA))
+
+paramAverageCage2 <- lapply(paramAverageCage, 
+                            function(x) if(is.na(x)) data.frame("parameter" = c("p1", "p2", "mu1", "mu2"), 
+                                                                "estimate" = rep(NA, 4),
+                                                                "variance" = rep(NA, 4)) else x)
 
 # Add week.trt combination to each element of the list and combine into one data.frame
 for(i in 1:length(paramAverageCage)){
