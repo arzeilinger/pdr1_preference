@@ -295,3 +295,5 @@ for(i in 1:length(paramAverageCage)){
 paramDataCage <- rbindlist(paramAverageCage) %>% as.data.frame()
 paramDataCage$estimate <- factor2numeric(paramDataCage$estimate)
 paramDataCage$variance <- factor2numeric(paramDataCage$variance)
+
+saveRDS(paramDataCage, file = "output/CMM_rate_parameters_per_cage.rds")

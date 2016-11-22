@@ -38,7 +38,8 @@ str(leafdata)
 table(leafdata$n_pd_leaves, leafdata$n_ms_petioles)
 
 #### Alternative PD index: 
-leafdata$pd_index2 <- leafdata %>% with(., (n_pd_leaves/n_leaves_source) + n_ms_petioles)
+prop_pd_leaves <- leafdata %>% with(., ifelse(n_leaves_source == 0, 1, n_pd_leaves/n_leaves_source))
+leafdata$pd_index2 <- leafdata %>% with(., prop_pd_leaves + n_ms_petioles)
 plot(x = leafdata$pd_index, y = leafdata$pd_index2)
 
 
@@ -51,6 +52,55 @@ plot(x = leafdata$pd_index, y = leafdata$pd_index2)
 # Matt's transmission parameters paper might have something to say about this
 # multiple possibilities can be evaluated using AIC
 
+
+
+####################################################################################################################
+#### Import and combine culturing data, leaf data, and preference data
+# Import culturing data
+culturedata <- read.xlsx("data/pdr1_culturing_data.xlsx", sheetName = "Infection data")
+str(culturedata)
+
+# Import preference data: estimates of rate parameters from CM model for each cage
+# choice 1 = source plants, choice 2 = test plants
+# Ignoring variance around parameters.
+# TO DO: check on convergence issues
+paramDataCage <- readRDS("output/CMM_rate_parameters_per_cage.rds")
+# Reshape paramDataCage
+paramDataCage <- paramDataCage[,c("parameter", "estimate", "week.cage")] %>% spread(., key = parameter, value = estimate)
+
+# Merge culturing and leaf data on week-trt-rep combination
+transdata <- inner_join(culturedata, leafdata, by = c("week", "trt", "rep")) 
+
+# Merge with preference data
+transdata$week.cage <- transdata %>% with(., paste(week, trt, rep, sep=""))
+transdata <- left_join(transdata, paramDataCage, by = "week.cage")
+str(transdata)
+
+saveRDS(transdata, file = "output/pdr1_transmission_preference_dataset.rds")
+
+
+#############################################################################################################
+#### Transmission models
+transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
+
+#### Model selection on PD symptom index
+pdMod1 <- glm(test.plant.infection ~ week*trt + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
+pdMod2 <- glm(test.plant.infection ~ week*trt + p1 + p2 + mu1 + mu2 + pd_index2, data = transdata, family = "binomial")
+# I think quasibinomial distribution might be better but then it doesn't calculate an AIC value. Need to look into this.
+AIC(pdMod1, pdMod2)
+plot(pdMod2)
+summary(pdMod2)
+
+
+transdata %>% group_by(., week, trt) %>% 
+  summarise(prop.infected = sum(test.plant.infection, na.rm = TRUE)/length(!is.na(test.plant.infection)))
+
+
+
+# symptom data
+sympMod <- glm(pd_index ~ week*trt, data = transdata, family = "quasipoisson")
+plot(sympMod)
+summary(sympMod)
 
 # draft model
 # test.infection.status ~ genotype*week + xf.pop.source + pd_index(1 or 2) + "vector.infection.index" + p1 + p2 + mu1 + mu2
