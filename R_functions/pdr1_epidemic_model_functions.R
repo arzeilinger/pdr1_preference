@@ -67,5 +67,6 @@ SECIMSimulations <- function(x){
   # Need to remove some time steps because under/over flow results in NAs
   model.nona <- model.out[!is.na(model.out$I),]
   model.dat <- model.nona[nrow(model.nona),c("time", "C", "I", "V_c", "V_i")]
+  #model.dat$trt <- x[14]
   return(model.dat)
 }
