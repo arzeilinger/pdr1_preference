@@ -390,6 +390,7 @@ P1eq.func <- function(params){
   P1eq <- (p1*mu2)/(mu1*p2 + mu2*p1 + mu1*mu2)
   return(P1eq)
 }
+
 P2eq.func <- function(params){
   p1 <- params[1]
   p2 <- params[2]
@@ -411,18 +412,12 @@ ProbEqmc <- function(data, parColumn = "parameter", estColumn = "estimate", varC
   # nsim = number of simulations
   # nmin = minimum number of final simulations,
   # nmin used to eliminate negative values and maintain symmetry of normal distributions
-  # Note: function will return warning on cbind() call.  Ignore it.
   estimates <- data[,estColumn]
   sd <- sqrt(data[,varColumn])
   # Simulate values for all rate parameters
   parSims <- sapply(1:length(estimates), 
                     function(x) simulateData(mean = estimates[x], SE = sd[x], nsim = nsim, nmin = nmin),
                     simplify = TRUE)
-  # # Simulating p1 values
-  # # Generate stochastic values of p1
-  # p1.samp <- simulateData(mean = parEstimates[parEstimates$parColumn == "p1",], SE = parVariances[parVariances$parColumn == "p1",], nsim = nsim, nmin = nmin)
-  # # Simulating p2 values
-  # p1.samp <- simulateData(mean = parEstimates[parEstimates$parColumn == "p1",], SE = parVariances[parVariances$parColumn == "p1",], nsim = nsim, nmin = nmin)
   # Calculate P1* distribution and summary statistics
   P1sim <- apply(parSims, 1, function(x) P1eq.func(as.numeric(x)))
   P1median <- median(P1sim)

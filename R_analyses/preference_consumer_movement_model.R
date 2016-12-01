@@ -51,7 +51,7 @@ cmmData <- prefdata %>% group_by(week, trt, time_from_start_hr) %>%
             n3 = sum(neutral_space)) %>%
   as.data.frame()
 cmmData$t <- cmmData$time_from_start_hr
-cmmData$N <- with(cmmData, n1 + n2 + n3)
+cmmData$N <- cmmData %>% with(., n1 + n2 + n3)
 cmmData$week.trt <- factor(paste(cmmData$week, cmmData$trt, sep = ""))
 
 r12Data <- dplyr::filter(cmmData, week == 12, trt == "R") 
@@ -63,13 +63,14 @@ modelFits <- lapply(levels(cmmData$week.trt), function(x) optimizeCMM(dat = cmmD
 names(modelFits) <- levels(cmmData$week.trt)
 saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output.rds")
 
-#modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
+modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
 
 #### Extract and organize parameter estimates from all models
 paramResults <- lapply(modelFits, mleTable)
+names(paramResults) <- levels(cmmData$week.trt)
 
 #### Average results for all good models
 paramAverage <- lapply(paramResults, function(x) averageModels(x, dAIC.threshold = 7))
@@ -169,7 +170,17 @@ dev.off()
 #### Equilibrial probabilities for stink bug data
 #####################################################################################
 
-## Functions to calculate equilibrium probabilities, P1* and P2* from parameter estimates
+sd <- sqrt(test$variance)
+
+p1sim <- simulateData(estimates[1], sd[1])
+p2sim <- simulateData(estimates[2], sd[2])
+mu1sim <- simulateData(estimates[3], sd[3])
+mu2sim <- simulateData(estimates[4], sd[4])
+paramSim <- cbind(p1sim, p2sim, mu1sim, mu2sim)
+
+P1eq.func(as.numeric(paramSim[50,]))
+P1eqsim <- apply(paramSim, 1, P1eq.func)
+
 # Equilibrium equations from Equation A12 in Appendix A of Zeilinger et al. (2014)
 ProbResults <- lapply(unique(paramData$week.trt), function(x) ProbEqmc(paramData[paramData$week.trt == x,]))
   
