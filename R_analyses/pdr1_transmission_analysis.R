@@ -6,10 +6,10 @@ lapply(my.packages, require, character.only = TRUE)
 
 ##############################################################################################################
 #### Combining data sets
-
 # Getting symptoms index
 prefdata <- read.xlsx("data/pdr1_preference_data.xlsx", sheetName = "data")
 str(prefdata)
+
 
 # Separate leaf and symptom data from preference count data
 leafdata <- prefdata[,c("week", "trt", "rep", "n_leaves_test", "n_leaves_source_start", 
