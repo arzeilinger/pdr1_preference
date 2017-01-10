@@ -1,8 +1,11 @@
 #### ANALYSIS OF PDR1 TRANSMISSION DATA
 
-my.packages <- c("tidyr", "dplyr", "data.table", "xlsx", "ggplot2", "MASS")
+rm(list = ls())
+# Load packages
+my.packages <- c("tidyr", "dplyr", "data.table", "xlsx", "ggplot2", "MASS", "logistf")
 lapply(my.packages, require, character.only = TRUE)
 
+source("R_functions/factor2numeric.R")
 
 ##############################################################################################################
 #### Combining data sets
@@ -87,8 +90,7 @@ transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
 transdata$source.cfu.per.g <- factor2numeric(transdata$source.cfu.per.g)
 
 # Remove the second 12-week trials and NAs
-transdata <- transdata %>% dplyr::filter(., week != 12.2) 
-                                         !is.na(pd_index) & !is.na(pd_index2))
+transdata <- transdata %>% dplyr::filter(., week != 12.2, !is.na(pd_index) & !is.na(pd_index2))
 
 #### Model selection on PD symptom index
 pdMod1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
@@ -98,10 +100,11 @@ AIC(pdMod1, pdMod2)
 plot(pdMod2)
 summary(pdMod2)
 # PD indices are essentially the same; go with Arash's index
-# Re-load data set to retain data points that are NA for pd indices
 
+# Re-load data set to retain data points that are NA for pd indices
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
 transdata$source.cfu.per.g <- factor2numeric(transdata$source.cfu.per.g)
+transdata$test.plant.infection <- factor2numeric(transdata$test.plant.infection)
 
 
 #### Model selection on preference rate parameters
@@ -122,24 +125,44 @@ noSourceMod <- glm(test.plant.infection ~ week*trt*mu1*pd_index, data = transdat
 noPDMod <- glm(test.plant.infection ~ week*trt*log10(source.cfu.per.g+1)*mu1, data = transdata, family = "binomial")
 trtprefMod <- glm(test.plant.infection ~ week*trt*mu1, data = transdata, family = "binomial")
 trtMod <- glm(test.plant.infection ~ week*trt, data = transdata, family = "binomial")
+noIntrxnMod <- glm(test.plant.infection ~ week + trt, data = transdata, family = "binomial")
 
-AIC(noSourceMod, noPDMod, trtprefMod, trtMod)
+AIC(noSourceMod, noPDMod, trtprefMod, trtMod, noIntrxnMod)
 # trtMod seems best
 summary(trtMod)
 
 
 #### symptom data
-sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "quasipoisson")
-plot(sympMod)
-summary(sympMod)
+sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
+sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "poisson")
+sympNoInterxnMod <- glm(pd_index ~ week + trt, data = transdata, family = "poisson")
+AIC(sympMod, sympTrtMod, sympNoInterxnMod)
+# sympTrtMod (with interaction) is best and quasipoisson distribution is best, AIC won't work with quasipoisson
+sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "quasipoisson")
+plot(sympTrtMod)
+summary(sympTrtMod)
 
 
 #### source xf pop
 boxcox(source.cfu.per.g + 1 ~ week*trt, data = transdata, lambda = seq(-2, 2, by=0.5))
 
 sourcexfMod <- lm(log10(source.cfu.per.g+1) ~ week*trt, data = transdata)
-plot(sourcexfMod)
+sourceNoInterxnMod <- lm(log10(source.cfu.per.g+1) ~ week + trt, data = transdata)
+AIC(sourcexfMod, sourceNoInterxnMod)
+
+plot(sourceNoInterxnMod)
 summary(sourcexfMod)
+
+## Proportion of source plants infected by week and trt
+transdata$source.plant.infection <- ifelse(transdata$source.cfu.per.g == 0, 0, 1)
+sourceProp <- transdata %>% group_by(., week, trt) %>% summarise(propInfected = sum(source.plant.infection, na.rm = TRUE)/sum(!is.na(source.plant.infection)))
+sourceProp
+
+sourcePropMod <- glm(source.plant.infection ~ week*trt, data = transdata, family = "binomial")
+summary(sourcePropMod)
+# Need to use Firth's correction
+sourcePropMod <- logistf(source.plant.infection ~ week*trt, data = transdata)
+summary(sourcePropMod)
 
 #######################################################################################################
 #### Plotting
@@ -160,7 +183,7 @@ transplot <- ggplot(data=transSummary, aes(x=week, y=percInfected)) +
   #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Percent transmission",
+  scale_y_continuous(name = "Percent test plants positive for X. fastidiosa",
                      limits = c(0,100)) +
   # ylab("% insects on source plant") + 
   # ylim(c(0,100)) +
