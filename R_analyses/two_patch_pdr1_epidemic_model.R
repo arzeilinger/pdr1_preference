@@ -25,8 +25,8 @@ names(resistantParams) <- paste(names(resistantParams), "r", sep = "")
 susceptibleParams <- parList$S[,1:10]
 names(susceptibleParams) <- paste(names(susceptibleParams), "s", sep = "")
 invariantParams <- parList$R[,11:13]
-mrVec <- rep(0, nmin) # Emmigration rate from Resistant patch
-msVec <- rep(0, nmin) # Emmigration rate from Susceptible patch
+mrVec <- rep(0.001, nmin) # Emmigration rate from Resistant patch
+msVec <- rep(0.001, nmin) # Emmigration rate from Susceptible patch
 M <- rep(1000, nmin) # Total number of migrant BGSS
 # Infectivity of migrants
 # Purcell 1975 estimated that 30% of BGSS in vineyards in early season were infectious
@@ -40,15 +40,15 @@ patchParams <- cbind(resistantParams, susceptibleParams, invariantParams, mrVec,
 #### Initial state variables
 # Initial state variables
 Ss0 <- 100;
-Us0 <- 199; Vs0 <- 1
-Ur0 <- 200; Vr0 <- 0
+Us0 <- 0; Vs0 <- 0
+Ur0 <- 0; Vr0 <- 0
 
 
 ##############################################################################################################################
 #### Run 2-patch model over range of Resistant patch sizes
 patchParams <- patchParams[1:1000,]
 
-Sr0Vec <- seq(0,200,length.out = 10) %>% round()
+Sr0Vec <- seq(1,200,length.out = 10) %>% round()
 
 patchParList <- vector("list", length(Sr0Vec))
 
@@ -97,11 +97,8 @@ summaryPatch <- summaryPatch %>% dplyr::filter(., state != "Vs", state != "Cr", 
 #### Plotting with ggplot2
 #### Mean infected density of C, I, and V
 patchAreaPlot <- ggplot(data=summaryPatch, aes(x=patchAreaRatio, y=mean, group=state, shape=state)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
   geom_line(aes(linetype=state), size=1.25) +
-  geom_point(position = position_dodge(width = 0.05), aes(shape=state), size=3.5) +
+  #geom_point(position = position_dodge(width = 0.05), aes(shape=state), size=3.5) +
   #geom_errorbar(aes(ymax=ciu, ymin=cil, width=0.2), position = position_dodge(width = 0.05)) +
   scale_x_continuous(name = "Ratio Resistant patch : Susceptible patch area") +
   #                    breaks = c(3,8,12)) + 
