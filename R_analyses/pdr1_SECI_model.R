@@ -105,7 +105,7 @@ for(i in 1:length(levels(rateParams$trt))){
   # Take vector recovery from Fabien's experiment with WT plants
   #lambdaVec <- simulateData(mean = 0.083, SE = 0.042, nsim = nsim, nmin = nmin)
   # Alternatively, use vector recovery rate from Oikos paper
-  lambdaVec <- 600
+  lambdaVec <- 100
   
   # Take host recovery as the change in proportion of source plants that were negative between 3 and 12 weeks
   # sourcepInfected for 12S - sourcepInfected for 3S
@@ -139,6 +139,9 @@ for(i in 1:length(levels(rateParams$trt))){
   parList[[i]] <- par.i
 }
 names(parList) <- levels(rateParams$trt)
+
+# Save parameter values
+saveRDS(parList, "output/pdr1_SECI_parameter_values.rds")
 
 ###########################################################################################
 #### Numerical Simulations

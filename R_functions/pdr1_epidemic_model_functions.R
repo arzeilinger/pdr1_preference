@@ -81,22 +81,20 @@ SECIMPatchModel <- function(Time, State, Pars){
   with(as.list(c(State, Pars)), {
     # Vector-SECI model with preference decomposed to attraction and leaving
     # Resistant patch -- PdR1 patch
-    dSr <- nu*(Er + Cr + Ir) - (phi_mucr*(1-exp(-beta_cr*T))*Vcr*Sr)/(Ir + Sr + Er + Cr) - (phi_muir*(1-exp(-beta_ir*T))*Vir*Sr)/(Ir + Sr + Er + Cr)
-    dEr <- (phi_mucr*(1-exp(-beta_cr*T))*Vcr*Sr)/(Ir + Sr + Er + Cr) + (phi_muir*(1-exp(-beta_ir*T))*Vir*Sr)/(Ir + Sr + Er + Cr) - (deltar + nu)*Er
+    dSr <- nu*(Er + Cr + Ir) - (phi_mucr*(1-exp(-beta_cr*T))*Vr*Sr)/(Ir + Sr + Er + Cr) - (phi_muir*(1-exp(-beta_ir*T))*Vr*Sr)/(Ir + Sr + Er + Cr)
+    dEr <- (phi_mucr*(1-exp(-beta_cr*T))*Vr*Sr)/(Ir + Sr + Er + Cr) + (phi_muir*(1-exp(-beta_ir*T))*Vr*Sr)/(Ir + Sr + Er + Cr) - deltar*Er - nu*Er
     dCr <- deltar*Er - nu*Cr - gammar*Cr
     dIr <- gammar*Cr - nu*Ir
-    dUr <- lambda*(Vcr + Vir) - (phi_pcr*(1 - exp(-alpha_cr*T))*Cr*Ur)/(Ir + Sr + Er + Cr) - (phi_pir*(1 - exp(-alpha_ir*T))*Ir*Ur)/(Ir + Sr + Er + Cr) - mr*Ur + ms*Us + (Ss0/(Sr0+Ss0))*Mu
-    dVcr <- (phi_pcr*(1 - exp(-alpha_cr*T))*Cr*Ur)/(Ir + Sr + Er + Cr) - lambda*Vcr - mr*Vcr + ms*Vcs + (Sr0/(Sr0+Ss0))*Mv
-    dVir <- (phi_pir*(1 - exp(-alpha_ir*T))*Ir*Ur)/(Ir + Sr + Er + Cr) - lambda*Vir - mr*Vir + ms*Vis + (Sr0/(Sr0+Ss0))*Mv
+    dUr <- lambda*Vr - (phi_pcr*(1 - exp(-alpha_cr*T))*Cr*Ur)/(Ir + Sr + Er + Cr) - (phi_pir*(1 - exp(-alpha_ir*T))*Ir*Ur)/(Ir + Sr + Er + Cr) - mr*Ur + ms*Us + (Ss0/(Sr0+Ss0))*Mu
+    dVr <- (phi_pcr*(1 - exp(-alpha_cr*T))*Cr*Ur)/(Ir + Sr + Er + Cr) + (phi_pir*(1 - exp(-alpha_ir*T))*Ir*Ur)/(Ir + Sr + Er + Cr) - lambda*Vr - mr*Vr + ms*Vs + (Sr0/(Sr0+Ss0))*Mv
     # Susceptible patch
-    dSs <- nu*(Es + Cs + Is) - (phi_mucs*(1-exp(-beta_cs*T))*Vcs*Ss)/(Is + Ss + Es + Cs) - (phi_muis*(1-exp(-beta_is*T))*Vis*Ss)/(Is + Ss + Es + Cs)
-    dEs <- (phi_mucs*(1-exp(-beta_cs*T))*Vcs*Ss)/(Is + Ss + Es + Cs) + (phi_muis*(1-exp(-beta_is*T))*Vis*Ss)/(Is + Ss + Es + Cs) - (deltas + nu)*Es
+    dSs <- nu*(Es + Cs + Is) - (phi_mucs*(1-exp(-beta_cs*T))*Vs*Ss)/(Is + Ss + Es + Cs) - (phi_muis*(1-exp(-beta_is*T))*Vs*Ss)/(Is + Ss + Es + Cs)
+    dEs <- (phi_mucs*(1-exp(-beta_cs*T))*Vs*Ss)/(Is + Ss + Es + Cs) + (phi_muis*(1-exp(-beta_is*T))*Vs*Ss)/(Is + Ss + Es + Cs) - deltas*Es - nu*Es
     dCs <- deltas*Es - nu*Cs - gammas*Cs
     dIs <- gammas*Cs - nu*Is
-    dUs <- lambda*(Vcs + Vis) - (phi_pcs*(1 - exp(-alpha_cs*T))*Cs*Us)/(Is + Ss + Es + Cs) - (phi_pis*(1 - exp(-alpha_is*T))*Is*Us)/(Is + Ss + Es + Cs) - ms*Us + mr*Ur + (Ss0/(Sr0+Ss0))*Mu
-    dVcs <- (phi_pcs*(1 - exp(-alpha_cs*T))*Cs*Us)/(Is + Ss + Es + Cs) - lambda*Vcs - ms*Vcs + mr*Vcr + (Ss0/(Sr0+Ss0))*Mv
-    dVis <- (phi_pis*(1 - exp(-alpha_is*T))*Is*Us)/(Is + Ss + Es + Cs) - lambda*Vis - ms*Vis + mr*Vir + (Ss0/(Sr0+Ss0))*Mv
-    return(list(c(dSr, dEr, dCr, dIr, dUr, dVcr, dVir, dSs, dEs, dCs, dIs, dUs, dVcs, dVis)))
+    dUs <- lambda*Vs - (phi_pcs*(1 - exp(-alpha_cs*T))*Cs*Us)/(Is + Ss + Es + Cs) - (phi_pis*(1 - exp(-alpha_is*T))*Is*Us)/(Is + Ss + Es + Cs) - ms*Us + mr*Ur + (Ss0/(Sr0+Ss0))*Mu
+    dVs <- (phi_pcs*(1 - exp(-alpha_cs*T))*Cs*Us)/(Is + Ss + Es + Cs) + (phi_pis*(1 - exp(-alpha_is*T))*Is*Us)/(Is + Ss + Es + Cs) - lambda*Vs - ms*Vs + mr*Vr + (Ss0/(Sr0+Ss0))*Mv
+    return(list(c(dSr, dEr, dCr, dIr, dUr, dVr, dSs, dEs, dCs, dIs, dUs, dVs)))
   })
 }
 
@@ -115,8 +113,8 @@ SECIMPatchDynamics <- function(x){
             nu = x[21], lambda = x[22], T = x[23],
             mr = x[24], ms = x[25], Mu = x[26], Mv = x[27])
   # Define starting values for states
-  State <- c(Sr = x[28], Er = 0, Cr = 0, Ir = 0, Ur = Ur0, Vcr = 0, Vir = Vir0,
-             Ss = Ss0, Es = 0, Cs = 0, Is = 0, Us = 200, Vcs = 0, Vis = 0) 
+  State <- c(Sr = x[28], Er = 0, Cr = 0, Ir = 0, Ur = Ur0, Vr = Vr0,
+             Ss = Ss0, Es = 0, Cs = 0, Is = 0, Us = Us0, Vs = Vs0) 
   Time <- seq(0, 5000, by = 1) # time steps
   model.out <- as.data.frame(ode(func = SECIMPatchModel,
                                  y = State,
@@ -143,8 +141,8 @@ SECIMPatchSimulations <- function(x){
             mr = x[24], ms = x[25], Mu = x[26], Mv = x[27],
             Sr0 = x[28])
   # Define starting values for states
-  State <- c(Sr = x[28], Er = 0, Cr = 0, Ir = 0, Ur = Ur0, Vcr = 0, Vir = 0,
-             Ss = Ss0, Es = 0, Cs = 0, Is = 0, Us = 200, Vcs = 0, Vis = Vis0) 
+  State <- c(Sr = x[28], Er = 0, Cr = 0, Ir = 0, Ur = Ur0, Vr = Vr0,
+             Ss = Ss0, Es = 0, Cs = 0, Is = 0, Us = Us0, Vs = Vs0) 
   Time <- seq(0, 50, by = 1) # time steps
   model.out <- as.data.frame(ode(func = SECIMPatchModel,
                                  y = State,
@@ -152,6 +150,6 @@ SECIMPatchSimulations <- function(x){
                                  times = Time))
   # Need to remove some time steps because under/over flow results in NAs
   model.nona <- model.out[!is.na(model.out$Ir),]
-  model.dat <- model.nona[nrow(model.nona),c("time", "Cr", "Ir", "Vcr", "Vir", "Es", "Cs", "Is", "Vcs", "Vis")]
+  model.dat <- model.nona[nrow(model.nona),c("time", "Cr", "Ir", "Vr", "Es", "Cs", "Is", "Vs")]
   return(model.dat)
 }

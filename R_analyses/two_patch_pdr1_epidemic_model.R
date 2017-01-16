@@ -1,6 +1,23 @@
 #####################################################################################################
 #### 2-Patch SECI Movement Model
+#### Expanded on model described in "pdr1_SECI_model.R" script
+#### Uses the same (or similar) parameter values as the above script
 #####################################################################################################
+
+rm(list = ls())
+# Load packages
+my.packages <- c("tidyr", "dplyr", "data.table", "deSolve", "ggplot2")
+lapply(my.packages, require, character.only = TRUE)
+
+source("R_functions/pdr1_epidemic_model_functions.R")
+source("R_functions/simulateData.R")
+source("R_functions/factor2numeric.R")
+
+#########################################################################################
+#### Parameter values
+
+#### Import saved parameter values
+parList <- readRDS("output/pdr1_SECI_parameter_values.rds")
 
 #### Structuring the parameter estimates, same estimates as single patch model
 resistantParams <- parList$R[,1:10]
@@ -8,11 +25,14 @@ names(resistantParams) <- paste(names(resistantParams), "r", sep = "")
 susceptibleParams <- parList$S[,1:10]
 names(susceptibleParams) <- paste(names(susceptibleParams), "s", sep = "")
 invariantParams <- parList$R[,11:13]
-mrVec <- rep(0.01, nmin) # Emmigration rate from Resistant patch
-msVec <- rep(0.01, nmin) # Emmigration rate from Susceptible patch
-M <- rep(6000, nmin) # Total number of migrant BGSS
-MuVec <- M*0
-MvVec <- M*1 # Purcell 1975 estimated that 30% of BGSS in vineyards in early season were infectious
+mrVec <- rep(0, nmin) # Emmigration rate from Resistant patch
+msVec <- rep(0, nmin) # Emmigration rate from Susceptible patch
+M <- rep(1000, nmin) # Total number of migrant BGSS
+# Infectivity of migrants
+# Purcell 1975 estimated that 30% of BGSS in vineyards in early season were infectious
+propV <- 0.3
+MuVec <- M*(1-propV)
+MvVec <- M*propV 
 Sr0Vec <- rep(100, nmin)
 
 patchParams <- cbind(resistantParams, susceptibleParams, invariantParams, mrVec, msVec, MuVec, MvVec, Sr0Vec)
@@ -23,27 +43,6 @@ patchParams <- cbind(resistantParams, susceptibleParams, invariantParams, mrVec,
 Ss0 <- 100;
 Ur0 <- 199; Vis0 <- 1
 
-# Testing out the model
-patchDynamicsOut <- SECIMPatchDynamics(patchParams[5,])
-# Plot only hosts because of larger vector numbers
-plotDynamics <- patchDynamicsOut %>% dplyr::select(., -time, -starts_with("V"), -starts_with("U"))
-matplot(plotDynamics[1:50,], type = "l")
-
-# Testing the simulation function
-patchSim <- SECIMPatchSimulations(patchParams[1,])
-
-# Running a bunch of simulations
-ti <- proc.time()
-patchSim <- apply(patchParams, 1, SECIMPatchSimulations) %>% rbindlist() %>% as.data.frame()
-tf <- proc.time()
-# Time the simulations took in minutes:
-(tf-ti)/60
-
-# Re-structuring the data set, focusing on C, I, and V for the Susceptible Patch
-patchSim$Vs <- with(patchSim, Vcs + Vis)
-patchSim$Vr <- with(patchSim, Vcr + Vir)
-
-saveRDS(patchSim, file = "output/simulation_results_2_patch_model.rds")
 
 
 ##############################################################################################################################
@@ -127,3 +126,29 @@ patchAreaPlot
 
 ggsave("results/figures/SECI_patch_area_plot.jpg", plot = patchAreaPlot,
        width = 7, height = 7, units = "in")
+
+
+###############################################################################################################
+#### Simulation with pdr1 2016 experiment derived parameter values
+
+# Testing out the model
+patchDynamicsOut <- SECIMPatchDynamics(patchParams[5,])
+# Plot only hosts because of larger vector numbers
+plotDynamics <- patchDynamicsOut %>% dplyr::select(., -time, -starts_with("V"), -starts_with("U"))
+matplot(plotDynamics[1:50,], type = "l")
+
+# Testing the simulation function
+patchSim <- SECIMPatchSimulations(patchParams[1,])
+
+# Running a bunch of simulations
+ti <- proc.time()
+patchSim <- apply(patchParams, 1, SECIMPatchSimulations) %>% rbindlist() %>% as.data.frame()
+tf <- proc.time()
+# Time the simulations took in minutes:
+(tf-ti)/60
+
+# Re-structuring the data set, focusing on C, I, and V for the Susceptible Patch
+patchSim$Vs <- with(patchSim, Vcs + Vis)
+patchSim$Vr <- with(patchSim, Vcr + Vir)
+
+saveRDS(patchSim, file = "output/simulation_results_2_patch_model.rds")
