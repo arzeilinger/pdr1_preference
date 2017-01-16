@@ -1,6 +1,5 @@
 Scripts for analysis of experimental data from PdR1 preference and transmission experiment, and incorporation of experimental data into compartmental epidemic models.
 
-Directory "data" contains experimental data
 Directory "R_functions" contains scripts of functions used repeatedly for statistics and epidemic models
 Directory "R_analyses" contains scripts for statistical analysis and running epidemic models
 
