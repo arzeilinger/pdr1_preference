@@ -33,23 +33,22 @@ M <- rep(1000, nmin) # Total number of migrant BGSS
 propV <- 0.3
 MuVec <- M*(1-propV)
 MvVec <- M*propV 
-Sr0Vec <- rep(100, nmin)
 
-patchParams <- cbind(resistantParams, susceptibleParams, invariantParams, mrVec, msVec, MuVec, MvVec, Sr0Vec)
+patchParams <- cbind(resistantParams, susceptibleParams, invariantParams, mrVec, msVec, MuVec, MvVec)
 
 
 #### Initial state variables
 # Initial state variables
 Ss0 <- 100;
-Ur0 <- 199; Vis0 <- 1
-
+Us0 <- 199; Vs0 <- 1
+Ur0 <- 200; Vr0 <- 0
 
 
 ##############################################################################################################################
 #### Run 2-patch model over range of Resistant patch sizes
-patchParams <- patchParams[1:1000,] %>% dplyr::select(., -Sr0Vec)
+patchParams <- patchParams[1:1000,]
 
-Sr0Vec <- seq(1,200,length.out = 10) %>% round()
+Sr0Vec <- seq(0,200,length.out = 10) %>% round()
 
 patchParList <- vector("list", length(Sr0Vec))
 
@@ -74,7 +73,6 @@ tf <- proc.time()
 #saveRDS(patchSimList, file = "output/simulation_results_2-patch_area.rds")
 
 for(i in 1:length(patchSimList)){
-  patchSimList[[i]]$Vs <- with(patchSimList[[i]], Vcs + Vis)
   patchSimList[[i]]$Sr0 <- Sr0Vec[i]
   patchSimList[[i]]$TI <- with(patchSimList[[i]], Cr + Ir + Cs + Is) # Total plants infected over all patches
 }
@@ -107,7 +105,7 @@ patchAreaPlot <- ggplot(data=summaryPatch, aes(x=patchAreaRatio, y=mean, group=s
   #geom_errorbar(aes(ymax=ciu, ymin=cil, width=0.2), position = position_dodge(width = 0.05)) +
   scale_x_continuous(name = "Ratio Resistant patch : Susceptible patch area") +
   #                    breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Proportion infected hosts in susceptible patch") +
+  scale_y_continuous(name = "Percent infected hosts in susceptible patch") +
   # ylab("% insects on source plant") + 
   #ylim(c(0,100)) +
   # xlab("Genotype") +
@@ -121,15 +119,16 @@ patchAreaPlot <- ggplot(data=summaryPatch, aes(x=patchAreaRatio, y=mean, group=s
 patchAreaPlot
 
 
-
-
-
 ggsave("results/figures/SECI_patch_area_plot.jpg", plot = patchAreaPlot,
        width = 7, height = 7, units = "in")
 
 
 ###############################################################################################################
 #### Simulation with pdr1 2016 experiment derived parameter values
+
+# Add constant Sr0Vec to parameter matrix
+patchParams$Sr0Vec <- rep(100, nmin)
+
 
 # Testing out the model
 patchDynamicsOut <- SECIMPatchDynamics(patchParams[5,])
@@ -146,9 +145,5 @@ patchSim <- apply(patchParams, 1, SECIMPatchSimulations) %>% rbindlist() %>% as.
 tf <- proc.time()
 # Time the simulations took in minutes:
 (tf-ti)/60
-
-# Re-structuring the data set, focusing on C, I, and V for the Susceptible Patch
-patchSim$Vs <- with(patchSim, Vcs + Vis)
-patchSim$Vr <- with(patchSim, Vcr + Vir)
 
 saveRDS(patchSim, file = "output/simulation_results_2_patch_model.rds")
