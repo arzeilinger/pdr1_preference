@@ -2,7 +2,7 @@
 
 rm(list = ls())
 # Load packages
-my.packages <- c("tidyr", "dplyr", "data.table", "xlsx", "ggplot2", "MASS", "logistf")
+my.packages <- c("tidyr", "dplyr", "data.table", "xlsx", "ggplot2", "MASS", "logistf", "multcomp")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -130,6 +130,12 @@ noIntrxnMod <- glm(test.plant.infection ~ week + trt, data = transdata, family =
 AIC(noSourceMod, noPDMod, trtprefMod, trtMod, noIntrxnMod)
 # trtMod seems best
 summary(trtMod)
+
+# Contrast testing difference in transmission between genotypes at 12 weeks
+transdata$week.trt <- with(transdata, factor(paste(week, trt, sep = ".")))
+trtModMC <- glm(test.plant.infection ~ week.trt, data = transdata, family = "binomial")
+transContrastTest <- glht(trtModMC, linfct = mcp(week.trt = "Tukey"))
+summary(transContrastTest)
 
 
 #### symptom data

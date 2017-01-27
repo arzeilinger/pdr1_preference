@@ -94,6 +94,9 @@ summaryPatch <- patchSimData %>% group_by(patchAreaRatio, state) %>% summarise(m
 summaryPatch[summaryPatch$state == "Vs",]
 summaryPatch <- summaryPatch %>% dplyr::filter(., state != "Vs", state != "Cr", state != "Ir", state != "TI")
 
+# For plotting
+summaryPatch$state <- ifelse(summaryPatch$state == "Cs", "HC", "HI")
+
 #### Plotting with ggplot2
 #### Mean infected density of C, I, and V
 patchAreaPlot <- ggplot(data=summaryPatch, aes(x=patchAreaRatio, y=mean, group=state, shape=state)) +
@@ -114,7 +117,6 @@ patchAreaPlot <- ggplot(data=summaryPatch, aes(x=patchAreaRatio, y=mean, group=s
         panel.background = element_blank()) 
 
 patchAreaPlot
-
 
 ggsave("results/figures/SECI_patch_area_plot.jpg", plot = patchAreaPlot,
        width = 7, height = 7, units = "in")
