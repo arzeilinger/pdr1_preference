@@ -4,15 +4,16 @@
 #### Functions for BGSS colony data
 
 #### Function to extract sheet data from multiple Google Sheets
-# Only works for <= 6 sheets at a time, API denies request for more sheets
 gsExtract <- function(x){
-  rawsheet <- gs_read(gsbgss, ws = x)
+  sheet <- gs_read(gsbgss, ws = x, range = "A3:D20")
+  # Make the function wait (time in seconds) until the next request to the Google API
+  Sys.sleep(time = 8)
   # remove the header information
-  sheet <- rawsheet[-c(1,2),]
+  #sheet <- rawsheet[-c(1,2),]
   # Sheet index as column
   sheet$sheetNum <- x
   # Because dates are a mess, make row position a surrogate for number of weeks
-  sheet$weeks <- row.names(sheet)
+  #sheet$weeks <- row.names(sheet)
   return(sheet)
 }
 
