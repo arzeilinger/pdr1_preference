@@ -30,11 +30,16 @@ transformPlateSetup <- function(plateSetup){
 # Can then easily be joined to the data frame exported from the qPCR software program
 transformPlateSetupcsv <- function(plateSetup){
   require(tidyr); require(dplyr)
-  plateSetup2 <- plateSetup[1:8,] %>% gather(., key = column, value = sample, X1:X12)
-  plateSetup2$wellNumber <- plateSetup2 %>% row.names() %>% as.integer()
-  plateSetup2$Well <- plateSetup2$column %>% gsub(pattern = "X", x = ., replacement = "") %>% paste(plateSetup2[,1], ., sep="")
-  return(plateSetup2)
+  # Run gather on transposed plate setup to get correct well numbers
+  plateSetupTrans <- t(plateSetup[1:8, -1]) %>% as.data.frame() 
+  names(plateSetupTrans) <- LETTERS[1:8]
+  plateSetupTrans$column <- row.names(plateSetupTrans) %>% gsub(pattern = "X", x = ., replacement = "")
+  plateSetupTrans <- plateSetupTrans %>% gather(., key = row, value = sample, -column)
+  plateSetupTrans$well <- paste(plateSetupTrans$row, plateSetupTrans$column, sep = "")
+  plateSetupTrans$wellNumber <- plateSetupTrans %>% row.names() %>% as.integer()
+  return(plateSetupTrans)
 }
+
 
 
 #### Function to read in Cq data output from LinRegPCR software program
