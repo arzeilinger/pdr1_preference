@@ -68,7 +68,7 @@ calculateCFU <- function(qpcrdata, serial_dilution, getModel = FALSE){
   scurve <- right_join(serial_dilution, qpcrdata[,c("sample", "N0")], by = c("dilution" = "sample")) %>% filter(., !is.na(cfu))
   # Standard curve linear regression
   scMod <- lm(log10(N0) ~ log10(cfu), data = scurve)
-  modelResults <- summary(scMod)
+  modelResults <- scMod
   # Back-calculate CFU from standard curve
   getCFU <- function(n0, slope, intercept){
     cfu <- 10^((log10(n0)-intercept)/slope)
