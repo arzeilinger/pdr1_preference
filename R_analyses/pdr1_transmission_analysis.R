@@ -3,7 +3,7 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "ggplot2",
-                 "MASS", "logistf", "multcomp", "bbmle")
+                 "MASS", "logistf", "multcomp", "bbmle", "lme4")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -95,6 +95,21 @@ acqDataVector$rep <- as.numeric(acqDataVector$rep)
 str(acqDataVector)
 
 
+#### Analyzing acquisition data at the per-vector level, with cage as a random effect
+acqDataVector$cage <- with(acqDataVector, paste(week, trt, rep, sep = ""))
+acqDataVector$vectorcfu <- floor(acqDataVector$vectorcfu)
+
+# Analysis of CFU data
+acqMod <- glmer(vectorcfu ~ week*trt + (1|cage),
+                data = acqDataVector, family = "poisson")
+summary(acqMod)
+
+# Analysis of infection status
+acqDataVector$vectorInfected <- ifelse(acqDataVector$vectorcfu > 0, 1, 0) # Turn CFUs into binomial presence/absence
+infectedMod <- glmer(vectorInfected ~ week*trt + (1|cage),
+                     data = acqDataVector, family = "binomial")
+summary(infectedMod)
+
 #### Constructing vector infection index
 # In each trial, I have Xf pops for each of the vectors. I could include in transmission model:
 # total Xf population among all vectors
@@ -106,14 +121,93 @@ str(acqDataVector)
 # Average duplicates for each sample
 acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu = mean(vectorcfu),
                                                                         sdcfu = sd(vectorcfu),
+                                                                        logCagecfu = mean(log10(vectorcfu + 1)),
                                                                         propVectorInfected = sum(vectorcfu > 0, na.rm = TRUE)/length(vectorcfu[!is.na(vectorcfu)]))
 printTibble(acqDataCage)
 
 acqSummary <- acqDataCage %>% group_by(week, trt) %>% summarise(meancfu = mean(cagecfu),
                                                                 secfu = sd(cagecfu)/sqrt(length(cagecfu[!is.na(cagecfu)])),
-                                                                meanPropInfected = mean(propVectorInfected))
+                                                                logMeancfu = mean(logCagecfu),
+                                                                logSEcfu = sd(logCagecfu)/sqrt(length(logCagecfu[!is.na(logCagecfu)])),
+                                                                meanPercInfected = mean(propVectorInfected)*100)
 acqSummary
 
+#### Plotting
+## Mean CFU
+vectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=meancfu)) +
+  # geom_bar(position=position_dodge(), stat="identity", 
+  #          aes(fill=trt)) +
+  # geom_hline(aes(yintercept=50), linetype="dashed") +
+  geom_line(aes(linetype=trt), size=1.25) +
+  geom_point(aes(shape=trt), size=2.5) +
+  geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Xylella CFU/vector") +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+vectorxfplot
+ggsave("results/figures/vector_xf_line_plot.jpg", plot = vectorxfplot,
+       width = 7, height = 7, units = "in")
+
+
+## Log mean CFU
+logvectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=logMeancfu)) +
+  # geom_bar(position=position_dodge(), stat="identity", 
+  #          aes(fill=trt)) +
+  # geom_hline(aes(yintercept=50), linetype="dashed") +
+  geom_line(aes(linetype=trt), size=1.25) +
+  geom_point(aes(shape=trt), size=2.5) +
+  geom_errorbar(aes(ymax=logMeancfu+logSEcfu, ymin=logMeancfu-logSEcfu), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Xylella CFU per vector (log10 transformed)") +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+logvectorxfplot
+ggsave("results/figures/vector_xf_line_plot_log.jpg", plot = logvectorxfplot,
+       width = 7, height = 7, units = "in")
+
+
+## Proportion of vectors infected
+propInfectiousplot <- ggplot(acqSummary, aes(x=week, y=meanPercInfected)) +
+  # geom_bar(position=position_dodge(), stat="identity", 
+  #          aes(fill=trt)) +
+  # geom_hline(aes(yintercept=50), linetype="dashed") +
+  geom_line(aes(linetype=trt), size=1.25) +
+  geom_point(aes(shape=trt), size=2.5) +
+  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Mean percent vectors positive for X. fastidiosa",
+                     limits = c(0,100)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+propInfectiousplot
+ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfectiousplot,
+       width = 7, height = 7, units = "in")
 
 #############################################################################################################
 #### Transmission models
