@@ -2,15 +2,22 @@
 
 rm(list = ls())
 # Load packages
-my.packages <- c("tidyr", "dplyr", "data.table", "xlsx", "ggplot2", "MASS", "logistf", "multcomp")
+my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "ggplot2",
+                 "MASS", "logistf", "multcomp", "bbmle")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
 
+# Function to look at whole df_tbl object
+printTibble <- function(dftbl){
+  return(print(dftbl, n = nrow(dftbl)))
+}
+
 ##############################################################################################################
-#### Combining data sets
-# Getting symptoms index
-prefdata <- read.xlsx("data/pdr1_preference_data.xlsx", sheetName = "data")
+#### Munging data
+
+# Preference data
+prefdata <- read.xlsx("data/2016_data/pdr1_preference_data.xlsx", sheet = "data")
 str(prefdata)
 
 
@@ -45,21 +52,10 @@ leafdata$pd_index2 <- leafdata %>% with(., prop_pd_leaves + n_ms_petioles)
 plot(x = leafdata$pd_index, y = leafdata$pd_index2)
 
 
-################################################################################################################
-#### Constructing vector infection index
-# In each trial, I have Xf pops for each of the vectors. I could include in transmission model:
-# total Xf population among all vectors
-# proportion of vectors infected (b/c some cages have fewer than 8 vectors)
-# an evenness index of Xf pops amongs vectors
-# Matt's transmission parameters paper might have something to say about this
-# multiple possibilities can be evaluated using AIC
-
-
-
 ####################################################################################################################
 #### Import and combine culturing data, leaf data, and preference data
 # Import culturing data
-culturedata <- read.xlsx("data/pdr1_culturing_data.xlsx", sheetName = "Infection data")
+culturedata <- read.xlsx("data/2016_data/pdr1_culturing_data.xlsx", sheet = "Infection data")
 # Remove repeat culturing data
 culturedata <- culturedata %>% dplyr::filter(., notes != "repeat culture" | is.na(notes))
 str(culturedata)
@@ -82,6 +78,41 @@ transdata <- left_join(transdata, paramDataCage, by = "week.cage")
 str(transdata)
 
 saveRDS(transdata, file = "output/pdr1_transmission_preference_dataset.rds")
+
+
+#############################################################################################################
+#### Import vector acquisition data and combine with transmission-preference dataset
+acqData <- readRDS("output/pdr1_2016_vector_cfu_from_qpcr.rds")
+# Remove qPCR serial dilution and NTC rows
+acqData <- acqData %>% dplyr::filter(!is.na(insect_code))
+str(acqData)
+# Remove one crazy outlier!
+acqData <- acqData %>% dplyr::filter(!(tube_code == 117 & wellNumber == 60))
+# Simplify data set
+acqDataVector <- acqData %>% dplyr::select(week, trt, rep, tube_code, cfu) %>% group_by(week, trt, rep, tube_code) %>% summarise(vectorcfu = mean(cfu))
+acqDataVector$week <- as.numeric(acqDataVector$week)
+acqDataVector$rep <- as.numeric(acqDataVector$rep)
+str(acqDataVector)
+
+
+#### Constructing vector infection index
+# In each trial, I have Xf pops for each of the vectors. I could include in transmission model:
+# total Xf population among all vectors
+# proportion of vectors infected (b/c some cages have fewer than 8 vectors)
+# an evenness index of Xf pops among vectors
+# Matt's transmission parameters paper might have something to say about this
+# multiple possibilities can be evaluated using AIC
+
+# Average duplicates for each sample
+acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu = mean(vectorcfu),
+                                                                        sdcfu = sd(vectorcfu),
+                                                                        propVectorInfected = sum(vectorcfu > 0, na.rm = TRUE)/length(vectorcfu[!is.na(vectorcfu)]))
+printTibble(acqDataCage)
+
+acqSummary <- acqDataCage %>% group_by(week, trt) %>% summarise(meancfu = mean(cagecfu),
+                                                                secfu = sd(cagecfu)/sqrt(length(cagecfu[!is.na(cagecfu)])),
+                                                                meanPropInfected = mean(propVectorInfected))
+acqSummary
 
 
 #############################################################################################################
@@ -127,9 +158,9 @@ trtprefMod <- glm(test.plant.infection ~ week*trt*mu1, data = transdata, family 
 trtMod <- glm(test.plant.infection ~ week*trt, data = transdata, family = "binomial")
 noIntrxnMod <- glm(test.plant.infection ~ week + trt, data = transdata, family = "binomial")
 
-AIC(noSourceMod, noPDMod, trtprefMod, trtMod, noIntrxnMod)
+AICctab(noSourceMod, noPDMod, trtprefMod, trtMod, noIntrxnMod, base = TRUE)
 # trtMod seems best
-summary(trtMod)
+summary(noIntrxnMod)
 
 # Contrast testing difference in transmission between genotypes at 12 weeks
 transdata$week.trt <- with(transdata, factor(paste(week, trt, sep = ".")))
@@ -154,10 +185,16 @@ boxcox(source.cfu.per.g + 1 ~ week*trt, data = transdata, lambda = seq(-2, 2, by
 
 sourcexfMod <- lm(log10(source.cfu.per.g+1) ~ week*trt, data = transdata)
 sourceNoInterxnMod <- lm(log10(source.cfu.per.g+1) ~ week + trt, data = transdata)
-AIC(sourcexfMod, sourceNoInterxnMod)
+AICctab(sourcexfMod, sourceNoInterxnMod, base = TRUE)
 
 plot(sourceNoInterxnMod)
-summary(sourcexfMod)
+summary(sourceNoInterxnMod)
+
+# Multiple comparison testing difference in transmission between genotypes at 12 weeks
+sourceModMC <- lm(log10(source.cfu.per.g+1) ~ week.trt, data = transdata)
+transContrastTest <- glht(sourceModMC, linfct = mcp(week.trt = "Tukey"))
+summary(transContrastTest)
+
 
 ## Proportion of source plants infected by week and trt
 transdata$source.plant.infection <- ifelse(transdata$source.cfu.per.g == 0, 0, 1)
