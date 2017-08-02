@@ -2,11 +2,11 @@
 
 rm(list = ls())
 # libraries
-my.packages <- c("xlsx", "tidyr", "dplyr", "data.table", "ggplot2", "lattice")
+my.packages <- c("openxlsx", "tidyr", "dplyr", "data.table", "ggplot2", "lattice")
 lapply(my.packages, require, character.only = TRUE)
 
 # Load preference data from .xlsx file
-prefdata <- read.xlsx("data/pdr1_preference_data.xlsx", sheetName = "data")
+prefdata <- read.xlsx("data/pdr1_preference_data.xlsx", sheet = "data")
 prefdata$cage <- paste(prefdata$trt, prefdata$rep, sep = "")
 str(prefdata)
 
@@ -33,18 +33,28 @@ write.csv(nbgss, file = "number_of_bgss_for_pcr.csv", row.names = FALSE)
 ##########################################################################
 #### Mean counts for each treatment, week, and time point
 meanPlant <- prefdata %>% group_by(week, trt, time_from_start_hr) %>% 
-  summarise(meanSourcePlant = mean(source_plant), meanTestPlant = mean(test_plant))
+  summarise(meanSourcePlant = mean(source_plant), meanTestPlant = mean(test_plant),
+            sumSourcePlant = sum(source_plant), sumTestPlant = sum(test_plant),
+            propTestPlant = meanTestPlant/(meanTestPlant+meanSourcePlant))
 
 ggplot(data=meanPlant,aes(x=time_from_start_hr, y=meanSourcePlant)) + 
   geom_line(aes(color=trt), size=1.25) +
   scale_x_continuous("Time from start (hr)") + 
   scale_y_continuous("Mean number of BGSS on source plant")
 
-ggplot(data=meanPlant,aes(x=time_from_start_hr, y=meanTestPlant)) + 
-  geom_line(aes(color=interaction(trt,week)), size=1.25) +
+# Proportion of bugs on test plant
+prefTimeSeries <- ggplot(data=meanPlant[meanPlant$week != 12.2,],aes(x=time_from_start_hr, y=propTestPlant)) + 
+                         geom_line(aes(color=interaction(week,trt)), size=1.25) +
+                         scale_x_continuous("Time from start (hr)") + 
+                         scale_y_continuous("Proportion of BGSS on test plant")
+prefTimeSeries #+ scale_x_continuous(limits = c(0,30))
+
+# Total number of bugs
+prefTimeSeries <- ggplot(data=meanPlant[meanPlant$week != 12.2,],aes(x=time_from_start_hr, y=sumTestPlant)) + 
+  geom_line(aes(color=interaction(week,trt)), size=1.25) +
   scale_x_continuous("Time from start (hr)") + 
   scale_y_continuous("Mean number of BGSS on test plant")
-
+prefTimeSeries #+ scale_x_continuous(limits = c(0,30))
 
 #############################################################################
 #### Counts at the end of trials
