@@ -118,18 +118,29 @@ summary(infectedMod)
 # Matt's transmission parameters paper might have something to say about this
 # multiple possibilities can be evaluated using AIC
 
-# Average duplicates for each sample
+## Average duplicates for each sample
 acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu = mean(vectorcfu),
                                                                         sdcfu = sd(vectorcfu),
                                                                         logCagecfu = mean(log10(vectorcfu + 1)),
                                                                         propVectorInfected = sum(vectorcfu > 0, na.rm = TRUE)/length(vectorcfu[!is.na(vectorcfu)]))
 printTibble(acqDataCage)
 
+## Merge with acquisition data at cage level with transmission-preference data set
+acqDataCage$week.cage <- with(acqDataCage, paste(week, trt, rep, sep=""))
+
+transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
+
+transdata <- left_join(transdata, acqDataCage, by = c("week.cage", "week", "trt", "rep"))
+transdata
+saveRDS(transdata, file = "output/pdr1_transmission_preference_dataset.rds")
+
+
 acqSummary <- acqDataCage %>% group_by(week, trt) %>% summarise(meancfu = mean(cagecfu),
                                                                 secfu = sd(cagecfu)/sqrt(length(cagecfu[!is.na(cagecfu)])),
                                                                 logMeancfu = mean(logCagecfu),
                                                                 logSEcfu = sd(logCagecfu)/sqrt(length(logCagecfu[!is.na(logCagecfu)])),
-                                                                meanPercInfected = mean(propVectorInfected)*100)
+                                                                meanPercInfected = mean(propVectorInfected)*100,
+                                                                sePercInfected = sd(propVectorInfected)/sqrt(length(propVectorInfected[!is.na(propVectorInfected)]))*100)
 acqSummary
 
 #### Plotting
@@ -190,7 +201,7 @@ propInfectiousplot <- ggplot(acqSummary, aes(x=week, y=meanPercInfected)) +
   # geom_hline(aes(yintercept=50), linetype="dashed") +
   geom_line(aes(linetype=trt), size=1.25) +
   geom_point(aes(shape=trt), size=2.5) +
-  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  geom_errorbar(aes(ymax=meanPercInfected+sePercInfected, ymin=meanPercInfected-sePercInfected), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12)) + 
   scale_y_continuous(name = "Mean percent vectors positive for X. fastidiosa",
@@ -212,7 +223,9 @@ ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfect
 #############################################################################################################
 #### Transmission models
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
-transdata$source.cfu.per.g <- factor2numeric(transdata$source.cfu.per.g)
+transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
+transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
+str(transdata)
 
 # Remove the second 12-week trials and NAs
 transdata <- transdata %>% dplyr::filter(., week != 12.2, !is.na(pd_index) & !is.na(pd_index2))
@@ -221,15 +234,15 @@ transdata <- transdata %>% dplyr::filter(., week != 12.2, !is.na(pd_index) & !is
 pdMod1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
 pdMod2 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index2, data = transdata, family = "binomial")
 # I think quasibinomial distribution might be better but then it doesn't calculate an AIC value. Need to look into this.
-AIC(pdMod1, pdMod2)
+AICtab(pdMod1, pdMod2, base = TRUE)
 plot(pdMod2)
 summary(pdMod2)
 # PD indices are essentially the same; go with Arash's index
 
 # Re-load data set to retain data points that are NA for pd indices
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
-transdata$source.cfu.per.g <- factor2numeric(transdata$source.cfu.per.g)
-transdata$test.plant.infection <- factor2numeric(transdata$test.plant.infection)
+transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
+transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
 
 
 #### Model selection on preference rate parameters
@@ -239,7 +252,7 @@ prefModp1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p
 prefModmu1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + mu1 + pd_index, data = transdata, family = "binomial")
 prefModnull <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + pd_index, data = transdata, family = "binomial")
 
-AIC(FullModel, prefModChoice1, prefModp1, prefModmu1, prefModnull)
+AICtab(FullModel, prefModChoice1, prefModp1, prefModmu1, prefModnull, base = TRUE)
 # Including only mu1 model is best
 summary(prefModmu1)
 
