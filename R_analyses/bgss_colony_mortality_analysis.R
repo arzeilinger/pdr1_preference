@@ -19,7 +19,7 @@ gsbgss <- gs_url("https://docs.google.com/spreadsheets/d/1ar4BDAHprFBn08PG9Es636
 # Need to change the vector of integers to reflect the index of active sheets
 # Making multiple sheet requests requires 8 second wait between requests, to not get shutdown by Google API
 # So this takes a while
-cages <- lapply(1:11, gsExtract) 
+cages <- lapply(1:19, gsExtract) 
 
 cages <- cages %>% rbindlist() %>% as.data.frame()
 names(cages) <- c("date", "adults", "nymphs", "notes", "sheetNum")
@@ -33,11 +33,11 @@ cages <- cages %>% dplyr::filter(., !(is.na(adults) & is.na(nymphs)))
 ########################################################################################
 
 # Need to update the date of the most current colony counts (i.e., date plants were changed)
-currentNumbers <- cages %>% dplyr::filter(., date == "2017-07-17")
-colSums(currentNumbers[,c("adults", "nymphs")])
+currentNumbers <- cages %>% dplyr::filter(., date == "2017-07-31" | date == "2017-07-24" | date == "2017-08-01")
+colSums(currentNumbers[,c("adults", "nymphs")], na.rm = TRUE)
 
 
-#########################################################################################
+2#########################################################################################
 #### Assess mortality rate of adults from peak abundance to most recent date
 #########################################################################################
 
