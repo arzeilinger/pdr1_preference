@@ -23,20 +23,25 @@ transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
 str(transdata)
 
 # Construct source plant infection status column
-transdata$source.cfu.per.g <- factor2numeric(transdata$source.cfu.per.g)
+transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
 transdata$source.infection <- transdata$source.cfu.per.g
 transdata$source.infection[transdata$source.infection > 0] <- 1
 
 # Transmission summary table
-transdata$test.plant.infection <- factor2numeric(transdata$test.plant.infection)
+transdata$test.plant.infection <- as.numeric(transdata$test.plant.infection)
 transSummary <- transdata %>% group_by(., week, trt) %>% 
   summarise(propInfected = sum(test.plant.infection, na.rm = TRUE)/sum(!is.na(test.plant.infection)),
             sepropI = sqrt(propInfected*(1 - propInfected)/8),
             meanPD = mean(pd_index, na.rm = TRUE),
             sePD = sd(pd_index, na.rm = TRUE)/sqrt(sum(!is.na(pd_index))),
-            meancfu = mean(log10(source.cfu.per.g+1)),
-            secfu = sd(log10(source.cfu.per.g+1))/sqrt(sum(!is.na(source.cfu.per.g))),
-            sourcepInfected = sum(source.infection, na.rm = TRUE)/sum(!is.na(source.infection)))
+            meancfuSource = mean(log10(source.cfu.per.g+1)),
+            secfuSource = sd(log10(source.cfu.per.g+1))/sqrt(sum(!is.na(source.cfu.per.g))),
+            sourcepInfected = sum(source.infection, na.rm = TRUE)/sum(!is.na(source.infection)),
+            meancfuVector = mean(log10(cagecfu+1), na.rm = TRUE),
+            secfuVector = sd(log10(cagecfu+1), na.rm = TRUE)/sqrt(sum(!is.na(cagecfu), na.rm = TRUE)),
+            meanPropVectorInfected = mean(propVectorInfected, na.rm = TRUE),
+            sePropVectorInfected = sd(propVectorInfected, na.rm = TRUE)/sqrt(sum(!is.na(propVectorInfected), na.rm = TRUE)))
+transSummary
 
 # Empty list of length 2 to hold the simulated parameter values
 parList <- vector("list", 2)
@@ -68,18 +73,19 @@ for(i in 1:length(levels(rateParams$trt))){
   phi_muiVec <- simulateData(phi_muiBar$estimate, phi_muiBar$se, nsim = nsim, nmin = nmin)
   
   #### Transmission parameters
-  # beta_c ~ P(trans) 8S
-  # beta_i ~ P(trans) 12S
+  # beta_c ~ P(trans) 3
+  # beta_i ~ P(trans) 12
   # Divide P(trans) by 8 to give the inoculation per vector
   # Assume that inoculation is 60% of acquisition, because I don't have acquisition data yet
+  # Inoculation
   beta_cBar <- transSummary %>% dplyr::filter(., week == 3 & trt == trt.i) %>% dplyr::select(., propInfected, sepropI)
   beta_cVec <- simulateData(mean = beta_cBar$propInfected, SE = beta_cBar$sepropI, nsim = nsim, nmin = nmin)
   
   beta_iBar <- transSummary %>% dplyr::filter(., week == 12 & trt == trt.i) %>% dplyr::select(., propInfected, sepropI)
   beta_iVec <- simulateData(mean = beta_iBar$propInfected, SE = beta_iBar$sepropI, nsim = nsim, nmin = nmin)
   
-  # alpha_cVec <- beta_cVec/0.6
-  # alpha_iVec <- beta_iVec/0.6
+  # Acquisition
+  alpha_cBar <- transSummary %>% dplyr::filter(., week == 3 & trt == trt.i) %>% dplyr::select(., meanPropVectorInfected, sePropVectorInfected)
   alpha_cVec <- beta_cVec/10
   alpha_iVec <- beta_iVec/10
   
