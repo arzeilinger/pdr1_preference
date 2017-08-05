@@ -79,15 +79,17 @@ for(i in 1:length(levels(rateParams$trt))){
   # Assume that inoculation is 60% of acquisition, because I don't have acquisition data yet
   # Inoculation
   beta_cBar <- transSummary %>% dplyr::filter(., week == 3 & trt == trt.i) %>% dplyr::select(., propInfected, sepropI)
-  beta_cVec <- simulateData(mean = beta_cBar$propInfected, SE = beta_cBar$sepropI, nsim = nsim, nmin = nmin)
+  beta_cVec <- simulateData(mean = beta_cBar$propInfected, SE = beta_cBar$sepropI, nsim = nsim, nmin = nmin)/8
   
   beta_iBar <- transSummary %>% dplyr::filter(., week == 12 & trt == trt.i) %>% dplyr::select(., propInfected, sepropI)
-  beta_iVec <- simulateData(mean = beta_iBar$propInfected, SE = beta_iBar$sepropI, nsim = nsim, nmin = nmin)
+  beta_iVec <- simulateData(mean = beta_iBar$propInfected, SE = beta_iBar$sepropI, nsim = nsim, nmin = nmin)/8
   
   # Acquisition
   alpha_cBar <- transSummary %>% dplyr::filter(., week == 3 & trt == trt.i) %>% dplyr::select(., meanPropVectorInfected, sePropVectorInfected)
-  alpha_cVec <- beta_cVec/10
-  alpha_iVec <- beta_iVec/10
+  alpha_cVec <- simulateData(mean = alpha_cBar$meanPropVectorInfected, SE = alpha_cBar$sePropVectorInfected, nsim = nsim, nmin = nmin)/8
+  
+  alpha_iBar <- transSummary %>% dplyr::filter(., week == 12 & trt == trt.i) %>% dplyr::select(., meanPropVectorInfected, sePropVectorInfected)
+  alpha_iVec <- simulateData(mean = alpha_iBar$meanPropVectorInfected, SE = alpha_iBar$sePropVectorInfected, nsim = nsim, nmin = nmin)/8
   
   #### Latent and incubation period
   # Latent period: take as uniform distribution between 4 and 21 days (or as a rate, 1/4 - 1/21),
@@ -111,7 +113,7 @@ for(i in 1:length(levels(rateParams$trt))){
   # Take vector recovery from Fabien's experiment with WT plants
   #lambdaVec <- simulateData(mean = 0.083, SE = 0.042, nsim = nsim, nmin = nmin)
   # Alternatively, use vector recovery rate from Oikos paper
-  lambdaVec <- 100
+  lambdaVec <- 10
   
   # Take host recovery as the change in proportion of source plants that were negative between 3 and 12 weeks
   # sourcepInfected for 12S - sourcepInfected for 3S
@@ -145,6 +147,9 @@ for(i in 1:length(levels(rateParams$trt))){
   parList[[i]] <- par.i
 }
 names(parList) <- levels(rateParams$trt)
+
+# Look at distribution of parameters
+lapply(1:length(parList), function(x) summary(parList[[x]]))
 
 # Save parameter values
 saveRDS(parList, "output/pdr1_SECI_parameter_values.rds")
@@ -187,11 +192,12 @@ summarySim <- dataSim %>% group_by(genotype, state) %>% summarise(mean = mean(pr
                                                                   cil = quantile(propInfected, 0.025),
                                                                   ciu = quantile(propInfected, 0.975),
                                                                   max = max(propInfected))
+summarySim
 
 summarySim[summarySim$state != "V",] %>% group_by(genotype) %>% summarise(infsum = sum(mean))
 # I + C total hosts infected are similar but Susceptible is higher:
-# Resistant = 0.86
-# Susceptible = 0.97
+# Resistant = 0.84
+# Susceptible = 0.98
 
 # Change state names to HC, HI, and V
 summarySim$state[summarySim$state == "C"] <- "HC"
@@ -199,13 +205,13 @@ summarySim$state[summarySim$state == "I"] <- "HI"
 
 #### Plotting with ggplot2
 #### Mean infected density of C, I, and V
-propInfectedPlot <- ggplot(data=summarySim, aes(x=genotype, y=mean, group=state, shape=state)) +
+propInfectedPlot <- ggplot(data=summarySim, aes(x=genotype, y=median, group=state, shape=state)) +
   # geom_bar(position=position_dodge(), stat="identity", 
   #          aes(fill=trt)) +
   # geom_hline(aes(yintercept=50), linetype="dashed") +
   # geom_line(aes(linetype=trt), size=1.25) +
   geom_point(position = position_dodge(width = 0.5), aes(shape=state), size=3.5) +
-  geom_errorbar(aes(ymax=ciu, ymin=cil, width=0.2), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymax=mean+sd, ymin=mean-sd, width=0.2), position = position_dodge(width = 0.5)) +
   # scale_x_continuous(name = "Weeks post inoculation", 
   #                    breaks = c(3,8,12)) + 
   scale_y_continuous(name = "Proportion infected") +
@@ -253,8 +259,8 @@ for(i in 1:ncol(parS)){
   dev.off()
 }
 
-jpeg("results/figures/histogram_seci_infected_host_density.jpg")
-hist(simList[[1]]$I, main = "", xlab = "")
+jpeg("results/figures/histogram_seci_infected_vector_density.jpg")
+  hist(simList[[2]]$V, main = "", xlab = "")
 dev.off()
 
 
