@@ -61,7 +61,10 @@ cfuList <- lapply(outputList, function(x) calculateCFU(qpcrdata = x, serial_dilu
 sModels <- lapply(1:length(cfuList), function(x) cfuList[[x]][[2]] %>% summary())
 # extract CFU data and make into a single data.frame
 vectorcfu <- lapply(1:length(cfuList), function(x) cfuList[[x]][[3]]) %>% rbindlist() %>% as.data.frame() 
+vectorcfu %>% dplyr::select(sample, cfu) %>% tail()
 
+
+###############################################################################################################
 #### The treatments (genotype-week) are not included in the plate setup, but are associated with a tube code
 #### Merge cfu data sets with treatment codes, from a Google Sheet
 
