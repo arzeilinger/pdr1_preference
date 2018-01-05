@@ -13,7 +13,12 @@ printTibble <- function(dftbl){
   return(print(dftbl, n = nrow(dftbl)))
 }
 
+
 ##############################################################################################################
+##############################################################################################################
+#### 2016 data
+##############################################################################################################
+
 #### Munging data
 
 # Preference data
@@ -427,3 +432,63 @@ xfscatterplot <- ggplot(data=transdata, aes(x=week, y=(source.cfu.per.g/1000000)
 xfscatterplot
 ggsave("results/figures/source_xf_pop_scatterplot.jpg", plot = xfscatterplot,
        width = 7, height = 7, units = "in")
+
+
+
+##############################################################################################################
+##############################################################################################################
+#### 2017 data
+##############################################################################################################
+
+#### Importing and munging data
+transdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "test_plant_culturing", detectDates = TRUE)
+str(transdata)
+
+# Remove Control plant samples
+transdata <- transdata %>% dplyr::filter(!grepl("CTRL", genotype))
+
+# Combine test_plant_infection_1 and test_plant_infection_2 columns
+# In all cases, when I re-cultured a sample (test_plant_infection_2), the results were the same as the 1st time or more reliable
+# So go with test_plant_infection_2 results when they are available
+transdata$test_plant_infection <- with(transdata, ifelse(!is.na(test_plant_infection_2), test_plant_infection_2, test_plant_infection_1)) %>% as.integer()                                      
+
+# Fix column classes
+transdata$genotype <- factor(transdata$genotype)
+transdata$trt <- factor(transdata$trt)
+
+
+
+#### Analysis with binomial GLM
+transMod1 <- glm(test_plant_infection ~ block + week*genotype, family = "quasibinomial", data = transdata)
+summary(transMod1)
+
+
+#### Summarize and plot data
+transSummary <- transdata %>% group_by(week, genotype, trt) %>% 
+  summarise(percInfected = 100*(sum(test_plant_infection)/length(test_plant_infection)))
+
+
+# Transmission plot
+transplot <- ggplot(data=transSummary, aes(x=week, y=percInfected)) +
+  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
+  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Percent test plants positive for X. fastidiosa",
+                     limits = c(0,100)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+transplot
+ggsave("results/figures/transmission_line_plot.jpg", plot = transplot,
+       width = 7, height = 7, units = "in")
+
+
