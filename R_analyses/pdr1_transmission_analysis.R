@@ -455,16 +455,32 @@ transdata$test_plant_infection <- with(transdata, ifelse(!is.na(test_plant_infec
 # Fix column classes
 transdata$genotype <- factor(transdata$genotype)
 transdata$trt <- factor(transdata$trt)
+transdata$block <- factor(transdata$block)
 
 
+##############################################################################################################
+#### Analysis of transmission data with binomial GLM
 
-#### Analysis with binomial GLM
-transMod1 <- glm(test_plant_infection ~ block + week*genotype, family = "quasibinomial", data = transdata)
+# Remove trials where test plant is positive and pre-screen plant is positive
+transdata2 <- transdata %>% dplyr::filter(!(grepl("PS plant positive", notes) & test_plant_infection == 1))
+
+transMod1 <- glm(test_plant_infection ~ block + week*genotype, family = "binomial", data = transdata2)
 summary(transMod1)
+transMod2 <- glm(test_plant_infection ~ block + week*trt, family = "binomial", data = transdata2)
+transMod3 <- glm(test_plant_infection ~ block + week, family = "binomial", data = transdata2)
+transMod4 <- glm(test_plant_infection ~ week*trt, family = "binomial", data = transdata2)
+transMod5 <- glm(test_plant_infection ~ week + trt, family = "binomial", data = transdata2)
+AICctab(transMod1, transMod2, transMod3, transMod4, transMod5, base = TRUE)
+summary(transMod3)
+# Note: best model doesn't include treatment or genotype, no difference there. And no trend with week; however, this is testing for a linear trend with week.
+# How do I test for a non-linear trend with week?
 
+#### Summary by block
+blockTrans <- transdata2 %>% group_by(block) %>% 
+  summarise(percInfected = 100*(sum(test_plant_infection)/length(test_plant_infection)))
 
 #### Summarize and plot data
-transSummary <- transdata %>% group_by(week, genotype, trt) %>% 
+transSummary <- transdata2 %>% group_by(week, genotype, trt) %>% 
   summarise(percInfected = 100*(sum(test_plant_infection)/length(test_plant_infection)))
 
 
@@ -488,7 +504,48 @@ transplot <- ggplot(data=transSummary, aes(x=week, y=percInfected)) +
         panel.background = element_blank()) 
 
 transplot
-ggsave("results/figures/transmission_line_plot.jpg", plot = transplot,
+ggsave("results/figures/2017_figures/transmission_line_plot_2017.jpg", plot = transplot,
        width = 7, height = 7, units = "in")
 
 
+##############################################################################################################
+#### Analysis of PD symptoms
+
+pdMod1 <- glm(PD_symptoms_index ~ block + week*genotype, family = "poisson", data = transdata)
+summary(pdMod1)
+pdMod2 <- glm(PD_symptoms_index ~ block + week*trt, family = "poisson", data = transdata)
+AICctab(pdMod1, pdMod2, base = TRUE)
+summary(pdMod2)
+
+pdSummary <- transdata %>% group_by(week, genotype, trt) %>% 
+  summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
+            sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
+
+
+# Transmission plot
+PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
+  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
+  geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Mean PD symptom index",
+                     limits = c(0,5)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+PDplot
+ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
+       width = 7, height = 7, units = "in")
+
+
+
+
+  
