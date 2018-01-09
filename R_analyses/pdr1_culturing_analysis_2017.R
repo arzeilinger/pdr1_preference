@@ -62,3 +62,44 @@ sourcedata2$xfpop <- with(sourcedata2,
                                         culture_1)))
 print.data.frame(sourcedata2)
 
+
+#### Analysis of source plant xf populations
+# Linear model with transformation
+boxcox(xfpop + 1 ~ block + week*genotype, data = sourcedata2, lambda = seq(-2, 2, by=0.5))
+sourcepopMod1 <- lm(sqrt(xfpop) ~ block + week*genotype, data = sourcedata2)
+plot(sourcepopMod1)
+summary(sourcepopMod1)
+# Generalized linear model with quasipoisson distribution
+poispopMod <- glm(xfpop ~ block + week*genotype, data = sourcedata2, family = "quasipoisson")
+plot(poispopMod)
+summary(poispopMod)
+
+#### Plotting source plant xf populations
+sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop + 1)) %>% 
+  group_by(week, genotype, trt) %>% 
+  summarise(mean = mean(logxfpop),
+            se = sd(logxfpop)/sqrt(length(logxfpop)))
+
+# Xf pops in source plant plot
+sourcexfplot <- ggplot(data=sourceSummary, aes(x=week, y=mean)) +
+  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
+  geom_errorbar(aes(ymax=mean+se, ymin=mean-se), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Xylella populations in source plant (log10)",
+                     limits = c(0,10)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+sourcexfplot
+ggsave("results/figures/2017_figures/source_xf_line_plot_2017.jpg", plot = PDplot,
+       width = 7, height = 7, units = "in")
+
