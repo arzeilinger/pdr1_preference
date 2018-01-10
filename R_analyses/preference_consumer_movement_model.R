@@ -22,10 +22,6 @@ source("R_functions/lattice_plotting_functions.R")
 source("R_functions/factor2numeric.R")
 # NLL gradient functions
 source("R_functions/cmm_gradient_functions.R")
-# Function to look at whole df_tbl object
-printTibble <- function(dftbl){
-  return(print(dftbl, n = nrow(dftbl)))
-}
 
 
 
@@ -326,17 +322,28 @@ saveRDS(paramDataCage, file = "output/CMM_rate_parameters_per_cage.rds")
 ###################################################################################################
 
 #### Importing data 
-
-prefdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "BGSS_count_data")
+# Import from local .xlsx file
+# prefdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "BGSS_count_data", detectDates = TRUE)
+# Import from Googlesheets
+pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
+                      visibility = "private")
+prefdataGS <- gs_read(pdr1DataURL, ws = "BGSS_count_data")
+prefdata <- prefdataGS
 str(prefdata)
-
 
 # Separate leaf and symptom data from preference count data
 leafdata <- prefdata[,15:ncol(prefdata)]
 prefdata <- prefdata[,1:14]
 prefdata$cage <- paste(prefdata$trt, prefdata$rep, sep = "")
+prefdata$genotype <- factor(prefdata$genotype)
 head(prefdata)
 
+
+# Max number of BGSS for each trial is 8
+# How many observations have >8 total bugs?
+prefdata <- prefdata %>% dplyr::mutate(total_bgss = xf_plant + test_plant + neutral_space + dead + missing)
+prefdata %>% dplyr::filter(total_bgss > 8)
+# 2-2-007S-2 trials had 9 BGSS in them, by accident. Otherwise, data look good.
 
 #### Calculate total counts among cages for each week, genotype, and time point
 # n1 = source plant (Xylella infected)
@@ -344,24 +351,29 @@ head(prefdata)
 # n3 = neutral space
 
 cmmData <- prefdata %>% group_by(week, genotype, time_from_start_hr) %>% 
-  summarise(n1 = sum(xf_plant),
-            n2 = sum(test_plant),
-            n3 = sum(neutral_space)) %>%
+  summarise(n1 = sum(xf_plant, na.rm = TRUE),
+            n2 = sum(test_plant, na.rm = TRUE),
+            n3 = sum(neutral_space, na.rm = TRUE)) %>%
   as.data.frame()
 cmmData$t <- cmmData$time_from_start_hr
 cmmData$N <- cmmData %>% with(., n1 + n2 + n3)
-cmmData$week.genotype <- factor(paste(cmmData$week, cmmData$genotype, sep = ""))
+cmmData$week.genotype <- factor(paste(cmmData$week, cmmData$genotype, sep = "-"))
 
+# Check an example
 data_5_102 <- dplyr::filter(cmmData, week == 5, genotype == "102") 
+data_14_102 <- dplyr::filter(cmmData, week == 14, genotype == "102") 
+data_14_094 <- dplyr::filter(cmmData, week == 14, genotype == "094") 
 
 # Max N for any row of cmmData is 8*8 = 64
 # Any rows of cmmData have more than N = 64 BGSS?
+cmmData %>% dplyr::filter(N > 64)
+cmmData %>% filter(week == 2 & genotype == "007")
 
 
-#### Fit models to each of the trt-week combinations
-modelFits <- lapply(levels(cmmData$week.trt), function(x) optimizeCMM(dat = cmmData[cmmData$week.trt == x,], upperConstraint = 64, aiccN = 8))
-names(modelFits) <- levels(cmmData$week.trt)
-saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output.rds")
+#### Fit models to each of the week-genotype combinations
+modelFits <- lapply(levels(cmmData$week.genotype), function(x) optimizeCMM(dat = cmmData[cmmData$week.genotype == x,], upperConstraint = 64, aiccN = 8))
+names(modelFits) <- levels(cmmData$week.genotype)
+saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output_2017.rds")
 
 modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
 
@@ -370,14 +382,14 @@ matrices <- lapply(modelFits, getParCorrelations)
 
 #### Extract and organize parameter estimates from all models
 paramResults <- lapply(modelFits, mleTable)
-names(paramResults) <- levels(cmmData$week.trt)
+names(paramResults) <- levels(cmmData$week.genotype)
 
 #### Average results for all good models
 paramAverage <- lapply(paramResults, function(x) averageModels(x, dAIC.threshold = 7))
 
-# Add week.trt combination to each element of the list and combine into one data.frame
+# Add week.genotype combination to each element of the list and combine into one data.frame
 for(i in 1:length(paramAverage)){
-  paramAverage[[i]]$week.trt <- levels(cmmData$week.trt)[i]
+  paramAverage[[i]]$week.genotype <- levels(cmmData$week.genotype)[i]
 } 
 paramData <- rbindlist(paramAverage) %>% as.data.frame()
 paramData$estimate <- factor2numeric(paramData$estimate)
@@ -387,10 +399,6 @@ paramData$variance <- factor2numeric(paramData$variance)
 paramData$se <- sqrt(paramData$variance)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
-
-dplyr::filter(paramData, week.trt == "12S" | week.trt == "12R")
-testpardat <- dplyr::filter(paramData, week.trt == "12S")
-testpardat
 
 
 #####################################################################################
