@@ -252,6 +252,8 @@ optimizeCMM <- function(dat = dat, lowerConstraint = 0.0001, upperConstraint = 1
   modelSelect <- aic.comp[order(aic.comp$dAICc),]
   resultsList <- list(op.list, modelSelect)
   names(resultsList) <- c("op.list", "modelSelect")
+  print(dat[1,])
+  print(resultsList$modelSelect)
   return(resultsList)
 }
 
