@@ -8,11 +8,6 @@ lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
 
-# Function to look at whole df_tbl object
-printTibble <- function(dftbl){
-  return(print(dftbl, n = nrow(dftbl)))
-}
-
 
 ##############################################################################################################
 ##############################################################################################################
@@ -441,8 +436,15 @@ ggsave("results/figures/source_xf_pop_scatterplot.jpg", plot = xfscatterplot,
 ##############################################################################################################
 
 #### Importing and munging data
-transdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "test_plant_culturing", detectDates = TRUE)
+# Importing from local .xlsx file
+# transdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "test_plant_culturing", detectDates = TRUE)
+# Import from Googlesheets
+pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
+                      visibility = "private")
+transdataGS <- gs_read(pdr1DataURL, ws = "test_plant_culturing")
+transdata <- transdataGS
 str(transdata)
+summary(transdata)
 
 # Remove Control plant samples
 transdata <- transdata %>% dplyr::filter(!grepl("CTRL", genotype))
@@ -481,7 +483,9 @@ blockTrans <- transdata2 %>% group_by(block) %>%
 
 #### Summarize and plot data
 transSummary <- transdata2 %>% group_by(week, genotype, trt) %>% 
-  summarise(percInfected = 100*(sum(test_plant_infection)/length(test_plant_infection)))
+  summarise(n = length(test_plant_infection),
+            nInfected = sum(test_plant_infection),
+            percInfected = 100*(nInfected/n))
 
 
 # Transmission plot
@@ -504,8 +508,51 @@ transplot <- ggplot(data=transSummary, aes(x=week, y=percInfected)) +
         panel.background = element_blank()) 
 
 transplot
+
 ggsave("results/figures/2017_figures/transmission_line_plot_2017.jpg", plot = transplot,
        width = 7, height = 7, units = "in")
+
+
+
+##############################################################################################################
+#### Fitting non-linear models to transmission data
+
+#### Fit a Holling Type IV model
+#### Use model selection to assess if separate parameters are justified for S and R genotypes, and compare to linear model
+
+# Setting up data
+transSummarynl <- transdata2 %>% group_by(week, trt) %>% 
+  summarise(n = length(test_plant_infection),
+            nInfected = sum(test_plant_infection),
+            propInfected = nInfected/n)
+
+# Set up NLL function
+holling4NLL <- function(a, b, c, week, nInfected){
+  probTrans <- (a*week^2)/(b + c*week + week^2)
+  -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
+  #return(probTrans)
+}
+
+
+#### Estimate parameters for Resistant lines
+## Initial parameters
+a0 <- 0.1 # Asymptotic propInfected
+# Peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
+b0 <- 8
+c0 <- -2
+
+transR <- transSummarynl[transSummarynl$trt == "R",]
+
+# Test NLL function
+with(transR, holling4NLL(a0, b0, c0, week, nInfected))
+lapply(1:nrow(transR), function(z) holling4NLL(a0, b0, c0, transR$week[z], transR$nInfected[z]))
+
+holling4Rmod <- mle2(holling4NLL, data = list(week = transR$week, nInfected = transR$nInfected),
+                  start = list(a = a0, b = b0, c = c0),
+                  #optimizer = "optimx",
+                  control = list(ftol = 1e-20, maxit = 10000))
+
+
 
 
 ##############################################################################################################
@@ -522,7 +569,7 @@ pdSummary <- transdata %>% group_by(week, genotype, trt) %>%
             sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
 
 
-# Transmission plot
+# PD symptoms plot
 PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
   geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape=genotype, colour = trt), size=3.5) +
