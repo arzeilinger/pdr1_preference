@@ -529,10 +529,20 @@ transSummarynl <- transdata2 %>% group_by(week, trt) %>%
 # Set up NLL function
 holling4NLL <- function(a, b, c, week, nInfected){
   probTrans <- (a*week^2)/(b + c*week + week^2)
-  -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
+  nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
+  ifelse(is.nan(nll), 1e07, nll)
   #return(probTrans)
 }
 
+holling4NLL.trt <- function(a.r, a.s, b.r, b.s, c.r, c.s, week, nInfected){
+  a <- c(a.r, a.s)[transSummarynl$trt]
+  b <- c(b.r, b.s)[transSummarynl$trt]
+  c <- c(c.r, c.s)[transSummarynl$trt]
+  probTrans <- (a*week^2)/(b + c*week + week^2)
+  nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
+  ifelse(is.nan(nll), 1e07, nll)
+  #return(probTrans)
+}
 
 #### Estimate parameters for Resistant lines
 ## Initial parameters
@@ -547,12 +557,27 @@ transR <- transSummarynl[transSummarynl$trt == "R",]
 with(transR, holling4NLL(a0, b0, c0, week, nInfected))
 lapply(1:nrow(transR), function(z) holling4NLL(a0, b0, c0, transR$week[z], transR$nInfected[z]))
 
-holling4Rmod <- mle2(holling4NLL, data = list(week = transR$week, nInfected = transR$nInfected),
+holling4Rmod <- mle2(holling4NLL, data = list(week = trans$week, nInfected = transR$nInfected),
                   start = list(a = a0, b = b0, c = c0),
                   #optimizer = "optimx",
-                  control = list(ftol = 1e-20, maxit = 10000))
+                  control = list(maxit = 10000))
 
+#### Compare models that split and average over genotypes
+with(transSummarynl, holling4NLL(a0, b0, c0, week, nInfected))
+with(transSummarynl, holling4NLL.trt(a0, a0, b0, b0, c0, c0, week, nInfected))
 
+holling4null <- mle2(holling4NLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+                     start = list(a = a0, b = b0, c = c0),
+                     optimizer = "optim", method = "Nelder-Mead",
+                     control = list(maxit = 10000))
+holling4.trt <- mle2(holling4NLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+                     start = list(a.r = a0, a.s = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0),
+                     optimizer = "optim", method = "Nelder-Mead",
+                     parameters = list(a~trt, b~trt, c~trt),
+                     control = list(maxit = 10000))
+
+ICtab(holling4null, holling4.trt,
+      type = "AICc", sort = TRUE, base = TRUE, nobs = 16)
 
 
 ##############################################################################################################
