@@ -3,7 +3,7 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "ggplot2",
-                 "MASS", "logistf", "multcomp", "bbmle", "lme4")
+                 "MASS", "logistf", "multcomp", "bbmle", "lme4", "googlesheets")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -460,6 +460,45 @@ transdata$trt <- factor(transdata$trt)
 transdata$block <- factor(transdata$block)
 
 
+
+#####################################################################################################################################
+#### Analysis of PD symptoms
+pdMod1 <- glm(PD_symptoms_index ~ block + week*genotype, family = "poisson", data = transdata)
+summary(pdMod1)
+pdMod2 <- glm(PD_symptoms_index ~ block + week*trt, family = "poisson", data = transdata)
+AICctab(pdMod1, pdMod2, base = TRUE)
+summary(pdMod2)
+
+pdSummary <- transdata %>% group_by(week, genotype, trt) %>% 
+  summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
+            sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
+
+
+# PD symptoms plot
+PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
+  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
+  geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Mean PD symptom index",
+                     limits = c(0,5)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+PDplot
+ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
+       width = 7, height = 7, units = "in")
+
+
+
 ##############################################################################################################
 #### Analysis of transmission data with binomial GLM
 
@@ -517,6 +556,10 @@ ggsave("results/figures/2017_figures/transmission_line_plot_2017.jpg", plot = tr
 ##############################################################################################################
 #### Fitting non-linear models to transmission data
 
+# Load NLL functions for all models
+source("R_functions/nll_functions_pdr1.R")
+
+
 #### Fit a Holling Type IV model
 #### Use model selection to assess if separate parameters are justified for S and R genotypes, and compare to linear model
 
@@ -526,41 +569,36 @@ transSummarynl <- transdata2 %>% group_by(week, trt) %>%
             nInfected = sum(test_plant_infection),
             propInfected = nInfected/n)
 
-# Set up NLL function
-holling4NLL <- function(a, b, c, week, nInfected){
-  probTrans <- (a*week^2)/(b + c*week + week^2)
-  nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
-  ifelse(is.nan(nll), 1e07, nll)
-  #return(probTrans)
-}
 
-holling4NLL.trt <- function(a.r, a.s, b.r, b.s, c.r, c.s, week, nInfected){
-  a <- c(a.r, a.s)[transSummarynl$trt]
-  b <- c(b.r, b.s)[transSummarynl$trt]
-  c <- c(c.r, c.s)[transSummarynl$trt]
-  probTrans <- (a*week^2)/(b + c*week + week^2)
-  nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
-  ifelse(is.nan(nll), 1e07, nll)
-  #return(probTrans)
-}
 
-#### Estimate parameters for Resistant lines
-## Initial parameters
+#### Initial parameters
+## Initial parameters for linear model
+a.l0 <- 0 # Y-intercept assumed at 0
+b.l0 <- 0.5/14 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+
+## Initial parameters for Holling Type IV
 a0 <- 0.1 # Asymptotic propInfected
 # Peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
 b0 <- 8
 c0 <- -2
 
+## Initial parameters for Ricker model
+a.rick0 <- 0.25/5 # Initial slope of the line
+b.rick0 <- 1/8 # x value for the peak
+
+
+#### Tests for Holling IV model  
 transR <- transSummarynl[transSummarynl$trt == "R",]
 
 # Test NLL function
 with(transR, holling4NLL(a0, b0, c0, week, nInfected))
 lapply(1:nrow(transR), function(z) holling4NLL(a0, b0, c0, transR$week[z], transR$nInfected[z]))
 
-holling4Rmod <- mle2(holling4NLL, data = list(week = trans$week, nInfected = transR$nInfected),
+holling4Rmod <- mle2(holling4NLL, data = list(week = transR$week, nInfected = transR$nInfected),
                   start = list(a = a0, b = b0, c = c0),
                   #optimizer = "optimx",
                   control = list(maxit = 10000))
+
 
 #### Compare models that split and average over genotypes
 with(transSummarynl, holling4NLL(a0, b0, c0, week, nInfected))
@@ -570,53 +608,60 @@ holling4null <- mle2(holling4NLL, data = list(week = transSummarynl$week, nInfec
                      start = list(a = a0, b = b0, c = c0),
                      optimizer = "optim", method = "Nelder-Mead",
                      control = list(maxit = 10000))
+
 holling4.trt <- mle2(holling4NLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
                      start = list(a.r = a0, a.s = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0),
+                     # start = list(a = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0), # Initial parameters for when a is not split by trt
                      optimizer = "optim", method = "Nelder-Mead",
                      parameters = list(a~trt, b~trt, c~trt),
                      control = list(maxit = 10000))
 
-ICtab(holling4null, holling4.trt,
+linearnull <- mle2(linearNLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+                   start = list(a = a.l0, b = b.l0),
+                   optimizer = "optim", method = "Nelder-Mead",
+                   control = list(maxit = 10000))
+
+rickernull <- mle2(rickerNLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+                   start = list(a = a.rick0, b = b.rick0),
+                   optimizer = "optim", method = "Nelder-Mead",
+                   control = list(maxit = 10000))
+
+ricker.trt <- mle2(rickerNLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+                   start = list(a.r = a.rick0, a.s = a.rick0, b.r = b.rick0, b.s = b.rick0),
+                   optimizer = "optim", method = "Nelder-Mead",
+                   parameters = list(a~trt, b~trt, c~trt),
+                   control = list(maxit = 10000))
+
+
+# Compare linear parameters to those from a GLM
+glmMod <- glm(test_plant_infection ~ week, data = transdata2, family = "binomial")
+# The parameter estimates are way off. Not sure why. Not sure I've written the linearNLL correctly
+
+
+ICtab(holling4null, holling4.trt, 
+      linearnull, 
+      rickernull, ricker.trt,
       type = "AICc", sort = TRUE, base = TRUE, nobs = 16)
 
 
+
 ##############################################################################################################
-#### Analysis of PD symptoms
+#### Fitting multiple models to Resistant and Susceiptle trts separately
 
-pdMod1 <- glm(PD_symptoms_index ~ block + week*genotype, family = "poisson", data = transdata)
-summary(pdMod1)
-pdMod2 <- glm(PD_symptoms_index ~ block + week*trt, family = "poisson", data = transdata)
-AICctab(pdMod1, pdMod2, base = TRUE)
-summary(pdMod2)
-
-pdSummary <- transdata %>% group_by(week, genotype, trt) %>% 
-  summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
-            sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
+# Get data sets
+transR <- transSummarynl[transSummarynl$trt == "R",]
+transS <- transSummarynl[transSummarynl$trt == "S",]
 
 
-# PD symptoms plot
-PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
-  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
-  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
-  geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Mean PD symptom index",
-                     limits = c(0,5)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+#### Fitting resistant line data
+transRresults <- optimizeTransModels(transR)
+modelSelectR <- transRresults[[2]]
+opListR <- transRresults[[1]]
 
-PDplot
-ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
-       width = 7, height = 7, units = "in")
-
+#### Fitting susceptible line data
+transSresults <- optimizeTransModels(transS)
+modelSelectS <- transSresults[[2]]
+opListS <- transSresults[[1]]
 
 
 
