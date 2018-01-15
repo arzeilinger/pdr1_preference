@@ -658,11 +658,53 @@ transRresults <- optimizeTransModels(transR)
 modelSelectR <- transRresults[[2]]
 opListR <- transRresults[[1]]
 
+# Get model predictions for plotting
+bestModR <- opListR$holling4Op # Holling4 model is the best
+bestcoefR <- as.list(coef(bestModR))
+
+newDatR <- data.frame(week = seq(2, 14, length = 101))
+newDatR$propInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
+
 #### Fitting susceptible line data
 transSresults <- optimizeTransModels(transS)
 modelSelectS <- transSresults[[2]]
 opListS <- transSresults[[1]]
 
+# Get model predictions for plotting
+bestModS <- opListS$rickerOp # Ricker model is the best
+bestcoefS <- as.list(coef(bestModS))
+
+newDatS <- data.frame(week = seq(2, 14, length = 101))
+newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
 
-  
+#### Plotting results
+# Plot S and R genotypes summarised together
+# Use Ricker model for S and Holling 4 model for R
+# Transmission plot
+transplotNL <- ggplot(data=transSummarynl, aes(x=week, y=propInfected)) +
+  #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape = trt, colour = trt), size=3.5) +
+  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  # Defining the colors for the lines based on the default ggplot2 colors and ggplot_build()$data
+  geom_smooth(data = newDatR, method = "loess", colour = "#F8766D", se = FALSE) +
+  geom_smooth(data = newDatS, method = "loess", colour = "#00BFC4", se = FALSE) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
+                     limits = c(0,1)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+transplotNL
+
+ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL,
+       width = 7, height = 7, units = "in")
+
