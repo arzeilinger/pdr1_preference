@@ -463,12 +463,37 @@ transdata$block <- factor(transdata$block)
 
 #####################################################################################################################################
 #### Analysis of PD symptoms
-pdMod1 <- glm(PD_symptoms_index ~ block + week*genotype, family = "poisson", data = transdata)
+pdMod1 <- glm(PD_symptoms_index ~ block + week*genotype, family = "quasipoisson", data = transdata)
 summary(pdMod1)
-pdMod2 <- glm(PD_symptoms_index ~ block + week*trt, family = "poisson", data = transdata)
+pdMod2 <- glm(PD_symptoms_index ~ block + week*trt, family = "quasipoisson", data = transdata)
 AICctab(pdMod1, pdMod2, base = TRUE)
 summary(pdMod2)
+# models are equivalent (except can't use AIC with quasipoisson); use pdMod1 with genotype
+# results are also equivalent between models too
 
+
+#### Contrast of R vs. S lines at 14 weeks
+# Not sure how to do the contrasts with a complex GLM ANCOVA, run a simpler ANOVA
+transdata$weekFactor <- factor(transdata$week)
+aovMod <- aov(log(PD_symptoms_index + 1) ~ weekFactor*genotype, data = transdata)
+plot(aovMod)
+summary(aovMod)
+
+# THIS ISN'T CORRECT, NEED TO WORK ON IT
+pdContrasts <- rbind("wk8R - wk8S" = c(0, 0, 0, 0, # wk2
+                                       0, 0, 0, 0, # wk5
+                                       -1, -1, 1, 1, # wk8
+                                       0, 0, 0, 0), # wk 14
+                     "wk14R - wk14S" = c(0, 0, 0, 0, 
+                                        0, 0, 0, 0,
+                                        0, 0, 0, 0,
+                                        -1, -1, 1, 1))
+pdContrastsTest <- glht(aovMod, pdContrasts)
+summary(pdContrastsTest)
+
+summary(aov(log(PD_symptoms_index + 1) ~ trt, data = transdata[transdata$week == 14,]))
+
+# Summarising and plotting
 pdSummary <- transdata %>% group_by(week, genotype, trt) %>% 
   summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
             sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
@@ -496,6 +521,7 @@ PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
 PDplot
 ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
        width = 7, height = 7, units = "in")
+
 
 
 
