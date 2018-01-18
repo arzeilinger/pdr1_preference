@@ -519,7 +519,6 @@ transMod5 <- glm(test_plant_infection ~ week + trt, family = "binomial", data = 
 AICctab(transMod1, transMod2, transMod3, transMod4, transMod5, base = TRUE)
 summary(transMod3)
 # Note: best model doesn't include treatment or genotype, no difference there. And no trend with week; however, this is testing for a linear trend with week.
-# How do I test for a non-linear trend with week?
 
 #### Summary by block
 blockTrans <- transdata2 %>% group_by(block) %>% 
@@ -529,18 +528,18 @@ blockTrans <- transdata2 %>% group_by(block) %>%
 transSummary <- transdata2 %>% group_by(week, genotype, trt) %>% 
   summarise(n = length(test_plant_infection),
             nInfected = sum(test_plant_infection),
-            percInfected = 100*(nInfected/n))
+            propInfected = nInfected/n)
 
 
 # Transmission plot
-transplot <- ggplot(data=transSummary, aes(x=week, y=percInfected)) +
+transplot <- ggplot(data=transSummary, aes(x=week, y=propInfected)) +
   geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape=genotype, colour = trt), size=3.5) +
   #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Percent test plants positive for X. fastidiosa",
-                     limits = c(0,100)) +
+  scale_y_continuous(name = "Proportion test plants positive for Xylella",
+                     limits = c(0,1)) +
   # ylab("% insects on source plant") + 
   # ylim(c(0,100)) +
   # xlab("Weeks post inoculation") +
@@ -696,7 +695,7 @@ transplotNL <- ggplot(data=transSummarynl, aes(x=week, y=propInfected)) +
   geom_smooth(data = newDatS, method = "loess", colour = "#00BFC4", se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
+  scale_y_continuous(name = "Proportion test plants positive for Xylella",
                      limits = c(0,1)) +
   # ylab("% insects on source plant") + 
   # ylim(c(0,100)) +

@@ -54,8 +54,12 @@ print.data.frame(sourcedata2)
 length(unique(sourcedata2$plantID)) == nrow(sourcedata2) # Check that spread() correctly prdouced a unique row for each plant ID; if so should be "TRUE"
 # Make sure that the latest re-culture was always the best
 recultures <- sourcedata2 %>% dplyr::filter(!is.na(culture_2))
+recultures
+# Six plants were initially negative or NA and were positive upon re-culturing
 # Things are complicated, latest re-culture wasn't always the best. Use complicated ifelse statements
 # Make the final xf pop estimates
+# IMPORTANT: If plant initially tested negative (culture_1 = 0) but later culturing tested positive, I set xfpop = 100, 
+# xfpop = 100 is an arbitrary value below the threshold of detection (which is around 700 - 800).
 sourcedata2$xfpop <- with(sourcedata2, 
                           ifelse(culture_1 == 0 & (culture_2 == 0 | is.na(culture_2)) & (culture_3 == 0 | is.na(culture_3)), 0,
                                  ifelse((culture_1 == 0 | is.na(culture_1)) & (culture_2 > 0 | culture_3 > 0), 100,
@@ -63,32 +67,43 @@ sourcedata2$xfpop <- with(sourcedata2,
 print.data.frame(sourcedata2)
 
 
+#### Some summary stats on source plant infections
+# How many plants were "true" negatives?
+sum(sourcedata2$xfpop == 0)
+# 10 plants were "true" negatives
+sourcedata2 %>% dplyr::filter(xfpop == 0)
+# All true negative plants are Resistant lines; 9/10 are 102R
+
 #### Analysis of source plant xf populations
 # Linear model with transformation
 boxcox(xfpop + 1 ~ block + week*genotype, data = sourcedata2, lambda = seq(-2, 2, by=0.5))
+# Best transformation is either sqrt or log; go with square root because the residuals look better
 sourcepopMod1 <- lm(sqrt(xfpop) ~ block + week*genotype, data = sourcedata2)
 plot(sourcepopMod1)
+anova(sourcepopMod1)
 summary(sourcepopMod1)
+
 # Generalized linear model with quasipoisson distribution
-poispopMod <- glm(xfpop ~ block + week*genotype, data = sourcedata2, family = "quasipoisson")
-plot(poispopMod)
-summary(poispopMod)
+poispopMod1 <- glm(xfpop ~ block + week*genotype, data = sourcedata2, family = "quasipoisson")
+plot(poispopMod1)
+# Residuals don't look worse than lm() with sqrt()
+
 
 #### Plotting source plant xf populations
-sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop + 1)) %>% 
+sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop+1), sqrtxfpop = sqrt(xfpop)) %>% 
   group_by(week, genotype, trt) %>% 
-  summarise(mean = mean(logxfpop),
-            se = sd(logxfpop)/sqrt(length(logxfpop)))
+  summarise_at(c("logxfpop", "sqrtxfpop"), funs(mean = mean(.), n = sum(!is.na(.)), se = sd(.)/sqrt(sum(!is.na(.)))))
+
 
 # Xf pops in source plant plot
-sourcexfplot <- ggplot(data=sourceSummary, aes(x=week, y=mean)) +
+sourcexfplot <- ggplot(data=sourceSummary, aes(x=week, y=sqrtxfpop_mean)) +
   geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape=genotype, colour = trt), size=3.5) +
-  geom_errorbar(aes(ymax=mean+se, ymin=mean-se), width=0.2) +
+  geom_errorbar(aes(ymax=sqrtxfpop_mean+sqrtxfpop_se, ymin=sqrtxfpop_mean-sqrtxfpop_se), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Xylella populations in source plant (log10)",
-                     limits = c(0,10)) +
+  scale_y_continuous(name = "Xylella populations in source plant (square root)") +
+                    # limits = c(0,10)) +
   # ylab("% insects on source plant") + 
   # ylim(c(0,100)) +
   # xlab("Weeks post inoculation") +
@@ -100,6 +115,7 @@ sourcexfplot <- ggplot(data=sourceSummary, aes(x=week, y=mean)) +
         panel.background = element_blank()) 
 
 sourcexfplot
-ggsave("results/figures/2017_figures/source_xf_line_plot_2017.jpg", plot = PDplot,
+
+ggsave("results/figures/2017_figures/source_xf_sqrt_line_plot_2017.jpg", plot = sourcexfplot,
        width = 7, height = 7, units = "in")
 
