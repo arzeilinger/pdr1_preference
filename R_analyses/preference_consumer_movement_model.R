@@ -9,7 +9,8 @@ rm(list = ls())
 # libraries
 # loading dtplyr that replaces dplyr and data.table
 my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "data.table",
-                 "lattice", "optimx", "bbmle", "numDeriv", "stringr")
+                 "lattice", "optimx", "bbmle", "numDeriv", "stringr",
+                 "googlesheets")
 lapply(my.packages, require, character.only = TRUE)
 
 ## Input functions for P1 and P2 equations, 
@@ -375,7 +376,7 @@ modelFits <- lapply(levels(cmmData$week.genotype), function(x) optimizeCMM(dat =
 names(modelFits) <- levels(cmmData$week.genotype)
 saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output_2017.rds")
 
-modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
+modelFits <- readRDS("output/CMM_optimx_model_selection_output_2017.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
@@ -395,8 +396,12 @@ paramData <- rbindlist(paramAverage) %>% as.data.frame()
 paramData$estimate <- factor2numeric(paramData$estimate)
 paramData$variance <- factor2numeric(paramData$variance)
 
-# Calculate SE and 95% CI
-paramData$se <- sqrt(paramData$variance)
+#### Calculate SE and 95% CI
+# Some variances are negative, not sure why, but need to fix.
+# For now, set all negative variances to 0. But I'm pretty sure this is not kosher
+# Also need to re-think model averaging of parameter estimates overall
+paramData$varianceCorrected <- with(paramData, ifelse(variance < 0, 0, variance))
+paramData$se <- sqrt(paramData$varianceCorrected)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
 
@@ -404,21 +409,23 @@ paramData$ciu <- with(paramData, estimate + 1.96*se)
 #####################################################################################
 #### Plotting rate parameters
 # Structure data.frame for plotting
-plotPars <- dplyr::filter(paramData, week.trt != "12.2R" & week.trt != "12.2S") # Remove second 12-week trials
+plotPars <- paramData
 # Split week.trt into week and trt columns
-plotPars$week <- plotPars$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric() 
-plotPars$trt <- plotPars$week.trt %>% str_extract(., "[aA-zZ]+")
+week.genotype.split <- tstrsplit(plotPars$week.genotype, split = "-")
+plotPars$week <- week.genotype.split[[1]] %>% as.numeric()
+plotPars$genotype <- week.genotype.split[[2]] %>% factor()
 # Split parameter into rate and choice columns, and replace values with more meaningful terms
 plotPars$rate <- plotPars$parameter %>% str_extract(., "[aA-zZ]+") %>% 
   gsub("p", "attraction", ., fixed = TRUE) %>% 
   gsub("mu", "leaving", ., fixed = TRUE)
 plotPars$choice <- plotPars$parameter %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
   gsub(1, "infected", ., fixed = TRUE) %>%
-  gsub(2, "Xf-free", ., fixed = TRUE)
-plotPars$latticegroups <- with(plotPars, paste(trt, choice, sep=" ")) %>% factor()
+  gsub(2, "Xf-free", ., fixed = TRUE) %>% factor()
+plotPars$latticegroups <- with(plotPars, paste(genotype, choice, sep=" ")) %>% factor()
+plotPars <- plotPars %>% arrange(., week)
 plotPars
 
-write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates.csv", row.names = FALSE)
+write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv", row.names = FALSE)
 
 # Create dummy x variable to space out points
 adj <- c(-0.5, -0.25, 0.25, 0.5)
@@ -431,41 +438,74 @@ for(i in 1:length(levels(plotPars$latticegroups))){
 }
 
 
-# Rate parameter plots together
-#tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
-# width = 76*2, height = 76, units = "mm", 
-# res = 600, compression = "lzw")
-#  plot.new()
-parameter_plot <-  with(plotPars,
-                        xyplot(estimate ~ dummyx|rate, groups = latticegroups,
-                               ly = cil, uy = ciu,
-                               scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free",
-                                             x = list(limits = c(0, 13), at = c(3,8,12),
-                                                      labels = list(c("","", ""), c(3,8,12))),
-                                             y = list(limits = list(c(0, 3), c(0, 0.6)),
-                                                      at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
-                                                      labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
-                               xlab = list("Weeks post-inoculation", cex = 1.2), 
-                               ylab = list(expression("Leaving rate "(hr^{-1})*"                          Attraction rate "(hr^{-1})),
-                                           cex = 1.2),
-                               layout = c(1,2), as.table = TRUE, strip = FALSE, pch = c(19, 1, 17, 2),
-                               type = 'p', cex = 1.2, col = "black", 
-                               key = list(x = 0.4, y = 0.85, corner = c(0,0),
-                                          text = list(lab = levels(latticegroups)), 
-                                          points = list(pch = c(19, 1, 17, 2), col = "black")), 
-                               prepanel = prepanel.ci,                      
-                               panel = function(x, y, ...) {                
-                                 panel.abline(v = unique(as.numeric(x)),  
-                                              col = "white")              
-                                 panel.superpose(x, y, ...)               
-                               },                                          
-                               panel.groups = panel.ci))                    
-# ltext(165, 9, "2009", cex = 1.3)
-# ltext(380, 9, "2010", cex = 1.3)
-# mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
-# mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+#### Lattice plot -- currently doesn't work
+# # Rate parameter plots together
+# #tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
+# # width = 76*2, height = 76, units = "mm", 
+# # res = 600, compression = "lzw")
+# #  plot.new()
+# parameter_plot <-  with(plotPars,
+#                         xyplot(estimate ~ dummyx|rate*genotype, groups = choice,
+#                                ly = cil, uy = ciu,
+#                                scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free",
+#                                              x = list(limits = c(0, 15), at = c(2,5,8,14),
+#                                                       labels = list(c("","","",""), c(2,5,8,14),
+#                                                                     c("","","",""), c(2,5,8,14),
+#                                                                     c("","","",""), c(2,5,8,14),
+#                                                                     c("","","",""), c(2,5,8,14)))),
+#                                              # y = list(limits = list(c(0, 3), c(0, 0.6)),
+#                                              #          at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
+#                                              #          labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
+#                                xlab = list("Weeks post-inoculation", cex = 1.2), 
+#                                ylab = list(expression("Leaving rate "(hr^{-1})*"                          Attraction rate "(hr^{-1})),
+#                                            cex = 1.2),
+#                                layout = c(4,2), as.table = TRUE, strip = FALSE, pch = c(19, 1),
+#                                type = 'p', cex = 1.2, col = "black", 
+#                                key = list(x = 0.4, y = 0.85, corner = c(0,0),
+#                                           text = list(lab = levels(choice)), 
+#                                           points = list(pch = c(19, 1), col = "black")), 
+#                                prepanel = prepanel.ci,                      
+#                                panel = function(x, y, ...) {                
+#                                  panel.abline(v = unique(as.numeric(x)),  
+#                                               col = "white")              
+#                                  panel.superpose(x, y, ...)               
+#                                },                                          
+#                                panel.groups = panel.ci)) 
+# parameter_plot
+# # ltext(165, 9, "2009", cex = 1.3)
+# # ltext(380, 9, "2010", cex = 1.3)
+# # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
+# # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+# 
+# trellis.device(device = "tiff", file = "results/figures/2017_figures/pdr1_cmm_rate_parameter_plot_2017.tif")
+# print(parameter_plot)
+# dev.off()
 
-trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
-print(parameter_plot)
-dev.off()
+
+
+
+#### Plotting using ggplot2
+plotPars$facetgroups <- with(plotPars, paste(rate, genotype, sep = "-")) %>% factor()
+
+parameter_plot2 <- ggplot(data=plotPars, aes(x=week, y=estimate, group = choice)) +
+  #geom_line(aes(linetype=inoc.time, colour = trt), size=1.25) +
+  geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  facet_wrap(~facetgroups, nrow = 2, scales = "free_y") +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = unique(plotPars$week)) + 
+  scale_y_continuous(name = "Rate (per hour)") +
+                     #limits = c(0,10)) +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+parameter_plot2
+
+ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_plot_2017.jpg", plot = parameter_plot2,
+       width = 14, height = 7, units = "in")
+
 
