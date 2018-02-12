@@ -346,6 +346,10 @@ prefdata <- prefdata %>% dplyr::mutate(total_bgss = xf_plant + test_plant + neut
 prefdata %>% dplyr::filter(total_bgss > 8)
 # 2-2-007S-2 trials had 9 BGSS in them, by accident. Otherwise, data look good.
 
+
+
+##############################################################################################################
+#### Estimating attraction and leaving rates from Consumer Movement Model
 #### Calculate total counts among cages for each week, genotype, and time point
 # n1 = source plant (Xylella infected)
 # n2 = test plant
@@ -385,6 +389,17 @@ matrices <- lapply(modelFits, getParCorrelations)
 paramResults <- lapply(modelFits, mleTable)
 names(paramResults) <- levels(cmmData$week.genotype)
 
+
+## Some variances are negative, need to figure out why
+exop <- modelFits[[14]]$op.list$fixed
+exhess <- hessian(func = NLLlist$fixed, x = as.numeric(exop[,grep("p",names(exop))]))
+diag(solve(exhess))
+
+exop2 <- modelFits[[14]]$op.list$mu.choice
+exhess2 <- hessian(func = NLLlist$mu.choice, x = as.numeric(exop2[,grep("p",names(exop2))]))
+diag(solve(exhess2))
+
+
 #### Average results for all good models
 paramAverage <- lapply(paramResults, function(x) averageModels(x, dAIC.threshold = 7))
 
@@ -398,10 +413,10 @@ paramData$variance <- factor2numeric(paramData$variance)
 
 #### Calculate SE and 95% CI
 # Some variances are negative, not sure why, but need to fix.
-# For now, set all negative variances to 0. But I'm pretty sure this is not kosher
+# Comment on ResearchGate forum (https://www.researchgate.net/post/In_R_how_to_estimate_confidence_intervals_from_the_Hessian_matrix) suggested taking absolute value of of variances
+# Do this for now, but probably need to bootstrap/jackknife
 # Also need to re-think model averaging of parameter estimates overall
-paramData$varianceCorrected <- with(paramData, ifelse(variance < 0, 0, variance))
-paramData$se <- sqrt(paramData$varianceCorrected)
+paramData$se <- sqrt(abs(paramData$variance))
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
 
@@ -428,14 +443,14 @@ plotPars
 write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv", row.names = FALSE)
 
 # Create dummy x variable to space out points
-adj <- c(-0.5, -0.25, 0.25, 0.5)
-plotPars$dummyx <- 0
-for(i in 1:length(levels(plotPars$latticegroups))){
-  group.i <- levels(plotPars$latticegroups)[i]
-  data.i <- which(plotPars$latticegroups == group.i)
-  adj.i <- adj[i]
-  plotPars$dummyx[data.i] <- plotPars[plotPars$latticegroups == group.i,"week"] + adj.i
-}
+# adj <- c(-0.5, -0.25, 0.25, 0.5)
+# plotPars$dummyx <- 0
+# for(i in 1:length(levels(plotPars$latticegroups))){
+#   group.i <- levels(plotPars$latticegroups)[i]
+#   data.i <- which(plotPars$latticegroups == group.i)
+#   adj.i <- adj[i]
+#   plotPars$dummyx[data.i] <- plotPars[plotPars$latticegroups == group.i,"week"] + adj.i
+# }
 
 
 #### Lattice plot -- currently doesn't work
@@ -509,3 +524,29 @@ ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_plot_2017.jpg", plo
        width = 14, height = 7, units = "in")
 
 
+
+
+#### Plot raw numbers of bugs over time
+plotCounts <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
+  dplyr::select(-n1, -n2, -n3, -t, -N, -week.genotype) %>% 
+  gather(., key = "choice", value = "proportion", xf_plant, test_plant)
+
+bgss_counts_plot <- ggplot(data=plotCounts, aes(x=time_from_start_hr, y=proportion, group = choice)) +
+  geom_line(aes(colour = choice), size=1.25) +
+  #geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
+  #geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  facet_wrap(~week + genotype, nrow = 4) +
+  scale_x_continuous(name = "Time from start (hr)") + 
+  scale_y_continuous(name = "Proportion of BGSS") +
+  #limits = c(0,10)) +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+bgss_counts_plot
+
+ggsave("results/figures/2017_figures/pdr1_bgss_counts_time-series_plot_2017.jpg", plot = bgss_counts_plot,
+       width = 14, height = 7, units = "in")
