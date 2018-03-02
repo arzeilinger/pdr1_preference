@@ -110,15 +110,35 @@ repCheck <- vectorData %>% group_by(tube_code) %>% summarise(mean = mean(Cq, na.
                                                              min = min(Cq, na.rm = TRUE), 
                                                              max = max(Cq, na.rm = TRUE))
 repCheck$diff <- repCheck$max - repCheck$min
+hist(repCheck$diff)
 # Select only those samples that have medium to large differences between duplicates
 badReps <- repCheck[repCheck$diff > 5,]
 badReps %>% print(., n = nrow(.))
 # Samples to prioritize for re-running qPCR
 badRepData <- vectorData %>% dplyr::filter(vectorData$tube_code %in% badReps$tube_code) %>% 
-  dplyr::select(tube_code, insect_code, week, Cq, Quality_checks)
+  dplyr::select(tube_code, insect_code, week, Cq, Quality_checks) %>%
+  dplyr::filter(!is.na(insect_code))
+badRepData %>% print.data.frame
+length(unique(badRepData$tube_code))
+
 write.csv(badRepData, file = "output/qpcr_bad_replicates.csv", row.names = FALSE)
 
 
-# Remove serial dilution and NTC rows
-vectorData <- vectorData %>% dplyr::filter(!is.na(insect_code))
+#### Select samples to run again, to try to improve efficiency (2018-03-01)
+badRepTubes <- unique(badRepData$tube_code) %>% as.numeric
+badReps.i <- (which(badRepTubes == max(badRepTubes))-10):which(badRepTubes == max(badRepTubes))
+badTubesSelected <- badRepTubes[badReps.i]
 
+tubes <- vectorData %>% dplyr::filter(!is.na(insect_code)) 
+tubes <- tubes$tube_code %>% as.numeric %>% unique 
+goodTubes <- setdiff(tubes, badRepTubes)
+
+# 21 samples to run qPCR again
+selectTubes <- c(sample(goodTubes, 10), badTubesSelected)
+
+# Check the info about these selected samples
+selectInfo <- vectorData %>% dplyr::filter(tube_code %in% selectTubes)
+
+# Save info
+write.csv(selectInfo, "output/samples_for_qpcr_re-run_2018-03-02.csv", row.names = FALSE)
+write.csv(selectTubes, "output/just_tube_codes_for_qpcr_re-run_2018_03_02.csv", row.names = FALSE)
