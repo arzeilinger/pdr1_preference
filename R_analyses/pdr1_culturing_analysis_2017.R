@@ -86,8 +86,8 @@ summary(sourcepopMod1)
 # Generalized linear model with quasipoisson distribution
 poispopMod1 <- glm(xfpop ~ block + week*genotype, data = sourcedata2, family = "quasipoisson")
 plot(poispopMod1)
-# Residuals don't look worse than lm() with sqrt()
-
+# Residuals look about the same as lm() with sqrt()
+summary(poispopMod1)
 
 #### Plotting source plant xf populations
 sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop+1), sqrtxfpop = sqrt(xfpop)) %>% 
