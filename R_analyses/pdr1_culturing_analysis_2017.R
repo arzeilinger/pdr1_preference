@@ -89,6 +89,12 @@ plot(poispopMod1)
 # Residuals look about the same as lm() with sqrt()
 summary(poispopMod1)
 
+
+#### NOTE ON ALTERNATIVE MODEL: Removing false negatives and all negatives had negligible effects on results.
+#### These models had reduced significance of week main effect but were otherwise unchanged.
+#### Log10 transformation works better if all negatives are removed
+
+
 #### Plotting source plant xf populations
 sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop+1), sqrtxfpop = sqrt(xfpop)) %>% 
   group_by(week, genotype, trt) %>% 
