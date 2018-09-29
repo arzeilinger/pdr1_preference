@@ -57,6 +57,23 @@ rickerNLL.trt <- function(a.r, a.s, b.r, b.s, week, nInfected){
 }
 
 
+#### Logistic NLL model
+## For now, I will only fit genotype data separately, so I don't need a .trt model too. I may add it later
+logisticGrowthNLL <- function(a, b, week, nInfected){
+  probTrans <- exp(a + b*week)/(1 + exp(a + b*week))
+  nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
+  ifelse(is.nan(nll), 1e07, nll)
+}
+
+
+#### Michaelis-Menten NLL model
+## For now, I will only fit genotype data separately, so I don't need a .trt model too. I may add it later
+MMNLL <- function(a, b, week, nInfected){
+  probTrans <- a*week/(b + week)
+  nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
+  ifelse(is.nan(nll), 1e07, nll)
+}
+
 
 ######################################################################################################
 #### Function to optimize all three candidate models and return model selection
@@ -77,12 +94,23 @@ optimizeTransModels <- function(dat){
                    start = list(a = a.rick0, b = b.rick0),
                    optimizer = "optim", method = "Nelder-Mead",
                    control = list(maxit = 10000))
+  # Logistic Growth optimization
+  logisticOp <- mle2(logisticGrowthNLL, data = list(week = dat$week, nInfected = dat$nInfected),
+                   start = list(a = a.logist0, b = b.logist0),
+                   optimizer = "optim", method = "Nelder-Mead",
+                   control = list(maxit = 10000))
+  # Michaelis-Menten optimization
+  MMOp <- mle2(MMNLL, data = list(week = dat$week, nInfected = dat$nInfected),
+                   start = list(a = a.mm0, b = b.mm0),
+                   optimizer = "optim", method = "Nelder-Mead",
+                   control = list(maxit = 10000))
   # Model selection using AICc
-  modelSelect <- ICtab(linearOp, holling4Op, rickerOp,
+  modelSelect <- ICtab(linearOp, holling4Op, rickerOp, logisticOp, MMOp,
                        type = "AICc", sort = TRUE, delta = TRUE, base = TRUE, 
                        nobs = 16)
   # Return a named list of the optimization results and the model selection
-  opList <- list(linearOp, holling4Op, rickerOp)
-  names(opList) <- c("linearOp", "holling4Op", "rickerOp")
+  opList <- list(linearOp, holling4Op, rickerOp, logisticOp, MMOp)
+  names(opList) <- c("linearOp", "holling4Op", "rickerOp", "logisticOp", "MMOp")
   return(list(opList, modelSelect))
 }
+

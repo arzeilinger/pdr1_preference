@@ -4,17 +4,25 @@
 rm(list = ls())
 # libraries
 # loading dtplyr that replaces dplyr and data.table
-my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2")
+my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "googlesheets")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/qpcrFunctions.R")
 
 # Directory for qPCR data
-qpcrDir <- "data/2016_data/qpcr_data/"
+qpcrDir <- "data/2016_data/Jeffs_qpcr_data/"
 
 #### Import serial dilution
 serial_dilution <- read.xlsx(paste(qpcrDir, "serial_dilution.xlsx", sep = ""), sheet = "dilutions_R")
 
+#### If only final CFU data set is needed
+#### FINAL DATA SET
+vectorData <- readRDS("output/pdr1_2016_vector_cfu_from_qpcr.rds")
+
+
+
+##########################################################################################################
+#### To estimate CFU for only one plate
 #### First qpcr run
 #### Import plate setup and transform plate setups
 ps419 <- read.csv(paste(qpcrDir, "041917_PD0059_plate_setup.csv", sep=""), header = TRUE) 
@@ -68,7 +76,6 @@ vectorcfu %>% dplyr::select(sample, cfu) %>% tail()
 #### The treatments (genotype-week) are not included in the plate setup, but are associated with a tube code
 #### Merge cfu data sets with treatment codes, from a Google Sheet
 
-require(googlesheets)
 
 # Register BGSS colony google sheets
 codesgs <- gs_url("https://docs.google.com/spreadsheets/d/1XX5HnGltAvShBskd5of5RNUZfhKrz35-y1WO00QlxpM/edit#gid=0",
@@ -95,8 +102,11 @@ vectorData <- vectorData %>% dplyr::filter(!is.na(tube_code))
 vectorData <- vectorData %>% full_join(., tubeCodes, by = "tube_code")
 saveRDS(vectorData, file = "output/pdr1_2016_vector_cfu_from_qpcr.rds")
 
+#### FINAL DATA SET
 vectorData <- readRDS("output/pdr1_2016_vector_cfu_from_qpcr.rds")
 
+
+#################################################################################################################
 ## Data quality checkts
 # check that the genotype-rep codes align between data sets, where they were included in the pcr sample names
 nameCheck <- vectorData[!is.na(vectorData$sample2),]
@@ -142,3 +152,40 @@ selectInfo <- vectorData %>% dplyr::filter(tube_code %in% selectTubes)
 # Save info
 write.csv(selectInfo, "output/samples_for_qpcr_re-run_2018-03-02.csv", row.names = FALSE)
 write.csv(selectTubes, "output/just_tube_codes_for_qpcr_re-run_2018_03_02.csv", row.names = FALSE)
+
+
+#### Are all consequtive tube codes represented in the data set?
+samplecodes <- vectorData %>% dplyr::filter(!grepl("D", vectorData$tube_code)) %>% dplyr::select(tube_code) 
+samplecodes <- as.numeric(samplecodes$tube_code) %>% unique() %>% sort()
+# Yes, so I can set up re-run plates with consequtive tube-code numbers 
+
+
+
+#####################################################################################################
+#### Re-running 2016 PdR1 vector DNA extracts on qPCR
+
+qpcrDir <- "data/2016_data/qpcr_data/"
+
+#### Import plate setup 
+## From googlesheets (Michael's template)
+# tsgs_url <- gs_url("https://docs.google.com/spreadsheets/d/1Xi-S8UeRQWufjaeWKYzJYN590kHX0qOJ2kweCVVg8Kw/edit#gid=0",
+#                   visibility = "private")
+# plateSetup1 <- gs_read(tsgs_url, ws = 1, range = "A6:M14")  %>% transformPlateSetupcsv()
+
+## From excel file
+plateSetup <- read.xlsx(paste(qpcrDir, "2018-04-23_pdr1_2016_rerun_plate_setup.xlsx", sep = ""), 
+                        sheet = 1, rows = c(6:14), cols = c(1:13)) %>% 
+  transformPlateSetupcsv()
+
+#### Read in lineRegPCR file
+qpcrOutput <- readLinReg(file = "2018-04-23_pdr1_2016_rerun.xlsx", dir = qpcrDir) %>%
+  left_join(., plateSetup[,c("wellNumber", "sample")], by = "wellNumber") #%>%
+  #dplyr::filter(., !is.na(sample))
+
+# Looking at results
+(qpcrCheck <- qpcrOutput[,c("Cq", "N0", "sample", "Sample_Use", "Quality_checks")] %>% arrange(., Cq)) 
+
+
+cfures1 <- calculateCFU(qpcrOutput, serial_dilution = serial_dilution, getModel = TRUE)
+cfures1  
+

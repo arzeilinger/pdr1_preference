@@ -41,16 +41,40 @@ transformPlateSetupcsv <- function(plateSetup){
 }
 
 
+#### Function to transform a plate setup from .xlsx file into a "long" data frame and create a variable with Well identifiers
+# Uses the plate setup worksheet template from Michael Voeltz (MV)
+# This version differs only from the previous ones only in where the plate setup is located in the sheet (which rows and columns need to be indexed)
+# Assumes that the plate setup has letter rows and number columns, 1 - 12, and that the letter rows are in first column
+# Also assumes that the sample names are idenfitied in each well
+# R automatically adds an "X" in front of the number column names when imported, need to strip that out
+# Returns "long" data frame with columns: "Well" that idenfies each unique well, and "sample" that has the sample names
+# Can then easily be joined to the data frame exported from the qPCR software program
+transformPlateSetupMV <- function(plateSetup){
+  require(tidyr); require(dplyr)
+  # Need to index from rows 1:8 and columns 2:13 to remove extra rows and columns that are read in from .csv files
+  plateSetupTrans <- t(plateSetup[6:13, -1]) %>% as.data.frame() 
+  names(plateSetupTrans) <- LETTERS[1:8]
+  plateSetupTrans$column <- 1:12
+  plateSetupTrans <- plateSetupTrans %>% gather(., key = row, value = sample, -column)
+  plateSetupTrans$well <- paste(plateSetupTrans$row, plateSetupTrans$column, sep = "")
+  plateSetupTrans$wellNumber <- plateSetupTrans %>% row.names() %>% as.integer()
+  return(plateSetupTrans)
+}
+
 
 #### Function to read in Cq data output from LinRegPCR software program
 #### Only imports the data table in the "compact" sheet
 #### Also strips the fluorophore from the wellNumber
 #### File name must include ".xlsx" at end
 readLinReg <- function(file, dir = "data/qpcr_data/"){
-  require(data.table)
+  require(data.table); require(openxlsx); require(tidyr)
   filePath <- paste(dir, file, sep = "")
   # Specifications to read in only the data table
-  cqdata <- read.xlsx(filePath, sheet = 3, cols = c(1:7), startRow = 4, colNames = TRUE) %>%
+  # get name of the sheet of interest (always ends with 'compact')
+  allSheetNames <- getSheetNames(filePath)
+  sheetName <- allSheetNames[grep("compact", allSheetNames)]
+  # extract the data table
+  cqdata <- read.xlsx(filePath, sheet = sheetName, cols = c(1:7), startRow = 4, colNames = TRUE) %>%
     # Get well number from "name" column and make it a separate column "wellNumber"
     mutate(., wellNumber = tstrsplit(name, "_", keep = 1, type.convert = TRUE)[[1]])
   return(cqdata)

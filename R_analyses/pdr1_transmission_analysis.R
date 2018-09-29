@@ -443,8 +443,6 @@ pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qAB
                       visibility = "private")
 transdataGS <- gs_read(pdr1DataURL, ws = "test_plant_culturing")
 transdata <- transdataGS
-str(transdata)
-summary(transdata)
 
 # Remove Control plant samples
 transdata <- transdata %>% dplyr::filter(!grepl("CTRL", genotype))
@@ -458,6 +456,9 @@ transdata$test_plant_infection <- with(transdata, ifelse(!is.na(test_plant_infec
 transdata$genotype <- factor(transdata$genotype)
 transdata$trt <- factor(transdata$trt)
 transdata$block <- factor(transdata$block)
+
+str(transdata)
+summary(transdata)
 
 
 
@@ -590,67 +591,74 @@ c0 <- -2
 a.rick0 <- 0.25/5 # Initial slope of the line
 b.rick0 <- 1/8 # x value for the peak
 
+## Initial parameters for Logistic Growth model
+b.logist0 <- 0.25/5/4 # Initial slope of the line divided by 4
+a.logist0 <- -6*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
 
-#### Tests for Holling IV model  
-transR <- transSummarynl[transSummarynl$trt == "R",]
+## Initial parameters for Michaelis-Menten model
+a.mm0 <- 0.5 # Asymptote
+b.mm0 <- 6 # value of x when y = a/2
 
-# Test NLL function
-with(transR, holling4NLL(a0, b0, c0, week, nInfected))
-lapply(1:nrow(transR), function(z) holling4NLL(a0, b0, c0, transR$week[z], transR$nInfected[z]))
-
-holling4Rmod <- mle2(holling4NLL, data = list(week = transR$week, nInfected = transR$nInfected),
-                  start = list(a = a0, b = b0, c = c0),
-                  #optimizer = "optimx",
-                  control = list(maxit = 10000))
-
-
-#### Compare models that split and average over genotypes
-with(transSummarynl, holling4NLL(a0, b0, c0, week, nInfected))
-with(transSummarynl, holling4NLL.trt(a0, a0, b0, b0, c0, c0, week, nInfected))
-
-holling4null <- mle2(holling4NLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
-                     start = list(a = a0, b = b0, c = c0),
-                     optimizer = "optim", method = "Nelder-Mead",
-                     control = list(maxit = 10000))
-
-holling4.trt <- mle2(holling4NLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
-                     start = list(a.r = a0, a.s = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0),
-                     # start = list(a = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0), # Initial parameters for when a is not split by trt
-                     optimizer = "optim", method = "Nelder-Mead",
-                     parameters = list(a~trt, b~trt, c~trt),
-                     control = list(maxit = 10000))
-
-linearnull <- mle2(linearNLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
-                   start = list(a = a.l0, b = b.l0),
-                   optimizer = "optim", method = "Nelder-Mead",
-                   control = list(maxit = 10000))
-
-rickernull <- mle2(rickerNLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
-                   start = list(a = a.rick0, b = b.rick0),
-                   optimizer = "optim", method = "Nelder-Mead",
-                   control = list(maxit = 10000))
-
-ricker.trt <- mle2(rickerNLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
-                   start = list(a.r = a.rick0, a.s = a.rick0, b.r = b.rick0, b.s = b.rick0),
-                   optimizer = "optim", method = "Nelder-Mead",
-                   parameters = list(a~trt, b~trt, c~trt),
-                   control = list(maxit = 10000))
-
-
-# Compare linear parameters to those from a GLM
-glmMod <- glm(test_plant_infection ~ week, data = transdata2, family = "binomial")
-# The parameter estimates are way off. Not sure why. Not sure I've written the linearNLL correctly
-
-
-ICtab(holling4null, holling4.trt, 
-      linearnull, 
-      rickernull, ricker.trt,
-      type = "AICc", sort = TRUE, base = TRUE, nobs = 16)
+# #### Tests for Holling IV model  
+# transR <- transSummarynl[transSummarynl$trt == "R",]
+# 
+# # Test NLL function
+# with(transR, holling4NLL(a0, b0, c0, week, nInfected))
+# lapply(1:nrow(transR), function(z) holling4NLL(a0, b0, c0, transR$week[z], transR$nInfected[z]))
+# 
+# holling4Rmod <- mle2(holling4NLL, data = list(week = transR$week, nInfected = transR$nInfected),
+#                   start = list(a = a0, b = b0, c = c0),
+#                   #optimizer = "optimx",
+#                   control = list(maxit = 10000))
+# 
+# 
+# #### Compare models that split and average over genotypes
+# with(transSummarynl, holling4NLL(a0, b0, c0, week, nInfected))
+# with(transSummarynl, holling4NLL.trt(a0, a0, b0, b0, c0, c0, week, nInfected))
+# 
+# holling4null <- mle2(holling4NLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+#                      start = list(a = a0, b = b0, c = c0),
+#                      optimizer = "optim", method = "Nelder-Mead",
+#                      control = list(maxit = 10000))
+# 
+# holling4.trt <- mle2(holling4NLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+#                      start = list(a.r = a0, a.s = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0),
+#                      # start = list(a = a0, b.r = b0, b.s = b0, c.r = c0, c.s = c0), # Initial parameters for when a is not split by trt
+#                      optimizer = "optim", method = "Nelder-Mead",
+#                      parameters = list(a~trt, b~trt, c~trt),
+#                      control = list(maxit = 10000))
+# 
+# linearnull <- mle2(linearNLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+#                    start = list(a = a.l0, b = b.l0),
+#                    optimizer = "optim", method = "Nelder-Mead",
+#                    control = list(maxit = 10000))
+# 
+# rickernull <- mle2(rickerNLL, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+#                    start = list(a = a.rick0, b = b.rick0),
+#                    optimizer = "optim", method = "Nelder-Mead",
+#                    control = list(maxit = 10000))
+# 
+# ricker.trt <- mle2(rickerNLL.trt, data = list(week = transSummarynl$week, nInfected = transSummarynl$nInfected),
+#                    start = list(a.r = a.rick0, a.s = a.rick0, b.r = b.rick0, b.s = b.rick0),
+#                    optimizer = "optim", method = "Nelder-Mead",
+#                    parameters = list(a~trt, b~trt, c~trt),
+#                    control = list(maxit = 10000))
+# 
+# 
+# # Compare linear parameters to those from a GLM
+# glmMod <- glm(test_plant_infection ~ week, data = transdata2, family = "binomial")
+# # The parameter estimates are way off. Not sure why. Not sure I've written the linearNLL correctly
+# 
+# 
+# ICtab(holling4null, holling4.trt, 
+#       linearnull, 
+#       rickernull, ricker.trt,
+#       type = "AICc", sort = TRUE, base = TRUE, nobs = 16)
 
 
 
 ##############################################################################################################
-#### Fitting multiple models to Resistant and Susceiptle trts separately
+#### Fitting multiple non-linear models to Resistant and Susceptible trts separately
 
 # Get data sets
 transR <- transSummarynl[transSummarynl$trt == "R",]
@@ -659,7 +667,7 @@ transS <- transSummarynl[transSummarynl$trt == "S",]
 
 #### Fitting resistant line data
 transRresults <- optimizeTransModels(transR)
-modelSelectR <- transRresults[[2]]
+(modelSelectR <- transRresults[[2]])
 opListR <- transRresults[[1]]
 
 # Get model predictions for plotting
@@ -671,7 +679,7 @@ newDatR$propInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestco
 
 #### Fitting susceptible line data
 transSresults <- optimizeTransModels(transS)
-modelSelectS <- transSresults[[2]]
+(modelSelectS <- transSresults[[2]])
 opListS <- transSresults[[1]]
 
 # Get model predictions for plotting

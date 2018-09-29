@@ -340,12 +340,19 @@ prefdata$genotype <- factor(prefdata$genotype)
 head(prefdata)
 
 
-# Max number of BGSS for each trial is 8
+## Max number of BGSS for each trial is 8
 # How many observations have >8 total bugs?
 prefdata <- prefdata %>% dplyr::mutate(total_bgss = xf_plant + test_plant + neutral_space + dead + missing)
 prefdata %>% dplyr::filter(total_bgss > 8)
 # 2-2-007S-2 trials had 9 BGSS in them, by accident. Otherwise, data look good.
 
+
+## Check howm many bugs I have in the freezer
+# This should be roughly the same as the number of bugs at the 4d time point
+freezerBugs <- prefdata %>% dplyr::filter(time_from_start_hr == 96) %>% dplyr::mutate(total_live_bugs = xf_plant + test_plant + neutral_space)
+(totalFreezerBugs <- sum(freezerBugs$total_live_bugs))
+# Number of extraction plates
+totalFreezerBugs/96
 
 
 ##############################################################################################################
