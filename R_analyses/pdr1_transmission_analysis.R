@@ -123,7 +123,7 @@ acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu 
                                                                         sdcfu = sd(vectorcfu),
                                                                         logCagecfu = mean(log10(vectorcfu + 1)),
                                                                         propVectorInfected = sum(vectorcfu > 0, na.rm = TRUE)/length(vectorcfu[!is.na(vectorcfu)]))
-printTibble(acqDataCage)
+print.data.frame(acqDataCage)
 
 ## Merge with acquisition data at cage level with transmission-preference data set
 acqDataCage$week.cage <- with(acqDataCage, paste(week, trt, rep, sep=""))
@@ -280,9 +280,9 @@ summary(transContrastTest)
 sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
 sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "poisson")
 sympNoInterxnMod <- glm(pd_index ~ week + trt, data = transdata, family = "poisson")
-AIC(sympMod, sympTrtMod, sympNoInterxnMod)
+AICctab(sympMod, sympTrtMod, sympNoInterxnMod, base = TRUE, delta = TRUE)
 # sympTrtMod (with interaction) is best and quasipoisson distribution is best, AIC won't work with quasipoisson
-sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "quasipoisson")
+sympTrtMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "quasipoisson")
 plot(sympTrtMod)
 summary(sympTrtMod)
 
@@ -508,6 +508,8 @@ ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
 ##############################################################################################################
 #### Analysis of transmission data with binomial GLM
 
+# How many trials have positive test plant and positive pre-screen plant?
+transdata %>% dplyr::filter((grepl("PS plant positive", notes) & test_plant_infection == 1))
 # Remove trials where test plant is positive and pre-screen plant is positive
 transdata2 <- transdata %>% dplyr::filter(!(grepl("PS plant positive", notes) & test_plant_infection == 1))
 

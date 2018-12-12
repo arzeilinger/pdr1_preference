@@ -76,13 +76,16 @@ outputList[[8]][outputList[[8]]$sample == " 96", "sample"] <- 96
 tubeCodes <- read.xlsx(paste(qpcrDir, "extraction_tube_codes_pdr1_2017.xlsx", sep = ""))
 str(tubeCodes)
 
+tubeCodes %>% dplyr::filter(week == 2 & block == 1 & genotype == "102" & rep == 4)
+
+
 ## Join tube codes and plate runs
 qpcrData <- outputList %>%
   rbindlist() %>%
   mutate(sampleNum = as.numeric(sample)) %>%
   left_join(., tubeCodes, by = c("sampleNum" = "tube_code"))
 ## Set any Cq values above 40 to 0
-qpcrData$Cq[qpcrData$Cq > 40] <- 0
+qpcrData$Cq[qpcrData$Cq >= 41] <- 0
 
 
 #### Summarize duplicates. 
@@ -102,11 +105,15 @@ vectorData <- qpcrData %>% group_by(sample) %>% summarise(minCq = min(Cq, na.rm 
                                                           plateName = last(plateName))
 
 ## Samples that have a large difference among duplicates and need to be run again
-vectorData %>% dplyr::filter(maxDiff > 5) %>% mutate("sample" = as.numeric(sample)) %>% dplyr::filter(!is.na(sample)) %>% arrange(plateName) %>% print.data.frame()
+vectorData %>% dplyr::filter(maxDiff > 5) %>% mutate("sample" = as.numeric(sample)) %>%
+  dplyr::filter(!is.na(sample)) %>% arrange(plateName) %>% tail(n = 20) #%>% print.data.frame()
 
-qpcrData %>% dplyr::filter(sample == 507)
+qpcrData %>% dplyr::filter(sample == 878)
 
-qpcrData %>% dplyr::filter(plateName == "2018-09-28_pdr1_2017.xlsx") %>% dplyr::select(well, sample, Cq, N0, Sample_Use, Quality_checks) %>% arrange(sample)
+qpcrData %>% dplyr::filter(plateName == "2018-11-28_pdr1_2017.xlsx") %>% dplyr::select(well, sample, Cq, N0, Sample_Use, Quality_checks) %>% arrange(sample)
+
+check <- qpcrData %>% dplyr::filter(week == 14 & block == 1 & genotype == "102" & rep == 4)
+check
 
 # Make a binary "infectious" variable for each bug
 # For now just take the max Cq value and if 0 < Cq < 40 then call the bug "infected"
@@ -116,6 +123,16 @@ vectorData2 <- vectorData %>% mutate(infectious = ifelse(modeCq > 0, 1, 0)) %>%
   group_by(genotype, trt, rep, week, block) %>% summarise(nbugs = length(infectious),
                                                           totalInfectious = sum(infectious),
                                                           propInfectious = totalInfectious/nbugs)
+
+## Remove qPCR control and PA (Preference Assumption test) samples
+vectorData3 <- vectorData2 %>% dplyr::filter(!is.na(genotype) & !grepl("PA", genotype))
+# Fix column classes
+vectorData3$block <- factor(vectorData3$block)
+vectorData3$genotype <- factor(vectorData3$genotype)
+vectorData3$trt <- factor(vectorData3$trt)
+
+#### Save acquisition data
+saveRDS(vectorData3, file = "output/vector_acquisition_data_pdr1_2017.rds")
 
 #### Importing and munging transmission data
 # Importing from local .xlsx file
@@ -145,15 +162,15 @@ summary(transdata)
 
 
 #### Join qPCR data and transmission data
-vectorData2$block <- factor(vectorData2$block)
-vectorData2$genotype <- factor(vectorData2$genotype)
-vectorData2$trt <- factor(vectorData2$trt)
-
 transVectorData <- transdata %>% dplyr::select(week, block, genotype, trt, rep, test_plant_infection) %>%
-  left_join(., vectorData2, by = c("genotype", "trt", "rep", "week", "block"))
+  left_join(., vectorData3, by = c("genotype", "trt", "rep", "week", "block"))
 
 ## Comparing transmission and acquisition data
-transVectorData %>% dplyr::filter(!is.na(propInfectious)) %>% arrange(test_plant_infection) %>% print.data.frame 
+transVectorData %>% dplyr::filter(!is.na(propInfectious)) %>% arrange(week, block) %>% print.data.frame 
+transVectorData %>% arrange(week, block) %>% print.data.frame() # tail(n = 30) 
+
+# Note: Trial 8-2-094R4 has a positive plant and all 8 bugs were negative. Need to double check this
+# Also, 14-1-102R4 has a positive plant and 0 positive bugs, but only 1 bug tested.
 
 ## Quick plot of proportion infectious over time
 qplot(x = week, y = propInfectious, data = transVectorData)
@@ -168,7 +185,7 @@ transVectorSummary
 
 
 #### Plot time series of vector infections
-vectorPlot <- ggplot(data=transVectorSummary[transVectorSummary$week < 14,], aes(x=week, y=meanPropInfectious)) +
+vectorPlot <- ggplot(data=transVectorSummary, aes(x=week, y=meanPropInfectious)) +
   geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape=genotype, colour = trt), size=3.5) +
   geom_errorbar(aes(ymax=meanPropInfectious+sePropInfectious, ymin=meanPropInfectious-sePropInfectious), width=0.2) +
@@ -192,8 +209,127 @@ ggsave("results/figures/2017_figures/infectious_vectors_line_plot_2017.jpg", plo
        width = 7, height = 7, units = "in")
 
 
+###############################################################################################################
+###############################################################################################################
+#### Analysis of acquisition data
+
+#### Final aquisition data, at the cage level
+vectorData3 <- readRDS("output/vector_acquisition_data_pdr1_2017.rds")
+str(vectorData3)
+summary(vectorData3)
+
+#### Poisson regression with experimental treatments
+acqMod <- glm(totalInfectious ~ block + week*genotype, data = vectorData3, family = "poisson")
+plot(acqMod)
+summary(acqMod)
+
+## quasi-Possion regression
+acqMod2 <- glm(totalInfectious ~ block + week*genotype, data = vectorData3, family = "quasipoisson")
+plot(acqMod2)
+summary(acqMod2)
 
 
+##############################################################################################################
+#### Fitting non-linear models to transmission data
+
+# Load NLL functions for all models
+source("R_functions/nll_functions_pdr1.R")
+
+
+#### Initial parameters
+## Initial parameters for linear model
+a.l0 <- 0 # Y-intercept assumed at 0
+b.l0 <- 0.5/14 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+
+## Initial parameters for Holling Type IV
+a0 <- 0.1 # Asymptotic propInfected
+# Peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
+b0 <- 8
+c0 <- -2
+
+## Initial parameters for Ricker model
+a.rick0 <- 0.25/5 # Initial slope of the line
+b.rick0 <- 1/8 # x value for the peak
+
+## Initial parameters for Logistic Growth model
+b.logist0 <- 0.25/5/4 # Initial slope of the line divided by 4
+a.logist0 <- -6*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
+
+## Initial parameters for Michaelis-Menten model
+a.mm0 <- 0.5 # Asymptote
+b.mm0 <- 6 # value of x when y = a/2
+
+
+#### Fitting multiple non-linear models to Resistant and Susceptible trts separately
+
+# Get data sets
+vectorR <- vectorData3[vectorData3$trt == "R",]
+vectorS <- vectorData3[vectorData3$trt == "S",]
+
+#### Fitting resistant line data
+vectorRresults <- optimizeVectorModels(vectorR)
+(modelSelectR <- vectorRresults[[2]])
+opListR <- vectorRresults[[1]]
+
+# Get model predictions for plotting
+bestModR <- opListR$holling4Op # Holling4 model is the best
+bestcoefR <- as.list(coef(bestModR))
+
+newDatR <- data.frame(week = seq(0, 14, length = 101))
+newDatR$totalInfectious <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
+
+#### Fitting susceptible line data
+vectorSresults <- optimizeVectorModels(vectorS)
+(modelSelectS <- vectorSresults[[2]])
+opListS <- vectorSresults[[1]]
+
+# Get model predictions for plotting
+bestModS <- opListS$holling4Op # Ricker model is the best
+bestcoefS <- as.list(coef(bestModS))
+
+newDatS <- data.frame(week = seq(0, 14, length = 101))
+newDatS$totalInfectious <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
+
+
+#### Plotting results
+## Calculate mean infectiousness for each trt and week
+vectorSummary2 <- vectorData3 %>% dplyr::filter(!is.na(totalInfectious)) %>% 
+  group_by(week, trt) %>% summarise(meanTotalInfectious = mean(totalInfectious, na.rm = TRUE),
+                                    nTotalInfectious = length(totalInfectious),
+                                    seTotalInfectious = sd(totalInfectious, na.rm = TRUE)/sqrt(nTotalInfectious)) 
+vectorSummary2
+
+# Plot S and R genotypes summarised together
+# Use Holling 4 model for S and for R
+# Vector acquisition plot
+vectorplotNL <- ggplot(data=vectorSummary, aes(x=week, y=meanTotalInfectious)) +
+  #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape = trt, colour = trt), size=3.5) +
+  geom_errorbar(aes(ymax=meanTotalInfectious+seTotalInfectious, ymin=meanTotalInfectious-seTotalInfectious), width=0.2) +
+  # Defining the colors for the lines based on the default ggplot2 colors and ggplot_build()$data
+  geom_smooth(data = newDatR, aes(x=week, y=totalInfectious), method = "loess", colour = "#F8766D", se = FALSE) +
+  geom_smooth(data = newDatS, aes(x=week, y=totalInfectious), method = "loess", colour = "#00BFC4", se = FALSE) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Mean number of infectious vectors",
+                     limits = c(-0.2,8.2)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+vectorplotNL
+
+ggsave("results/figures/2017_figures/acquisition_non-linear_plot_2017.jpg", plot = vectorplotNL,
+       width = 7, height = 7, units = "in")
+
+
+###############################################################################################################
 ###############################################################################################################
 #### Look at 4th attempt at standard curve (2018-08-31 qPCR plate)
 

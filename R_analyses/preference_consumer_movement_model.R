@@ -10,7 +10,7 @@ rm(list = ls())
 # loading dtplyr that replaces dplyr and data.table
 my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "data.table",
                  "lattice", "optimx", "bbmle", "numDeriv", "stringr",
-                 "googlesheets")
+                 "googlesheets", "RColorBrewer")
 lapply(my.packages, require, character.only = TRUE)
 
 ## Input functions for P1 and P2 equations, 
@@ -335,7 +335,6 @@ str(prefdata)
 # Separate leaf and symptom data from preference count data
 leafdata <- prefdata[,15:ncol(prefdata)]
 prefdata <- prefdata[,1:14]
-prefdata$cage <- paste(prefdata$trt, prefdata$rep, sep = "")
 prefdata$genotype <- factor(prefdata$genotype)
 head(prefdata)
 
@@ -350,7 +349,8 @@ prefdata %>% dplyr::filter(total_bgss > 8)
 ## Check howm many bugs I have in the freezer
 # This should be roughly the same as the number of bugs at the 4d time point
 freezerBugs <- prefdata %>% dplyr::filter(time_from_start_hr == 96) %>% dplyr::mutate(total_live_bugs = xf_plant + test_plant + neutral_space)
-(totalFreezerBugs <- sum(freezerBugs$total_live_bugs))
+(totalFreezerBugs <- sum(freezerBugs$total_live_bugs)) 
+# Total freezer bugs = 917
 # Number of extraction plates
 totalFreezerBugs/96
 
@@ -507,13 +507,23 @@ write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv",
 
 
 #### Plotting using ggplot2
-plotPars$facetgroups <- with(plotPars, paste(rate, genotype, sep = "-")) %>% factor()
+plotPars <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2017.csv", header = TRUE)
 
-parameter_plot2 <- ggplot(data=plotPars, aes(x=week, y=estimate, group = choice)) +
+# Prepend zeroes to genotype labels and make a factor
+plotPars$genotype <- plotPars$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
+
+# Color palette
+my_palette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+my_palette = c(brewer.pal(5, "Blues")[c(4)], brewer.pal(5, "Set1")[c(3)])
+
+# Plot
+parameter_plot2 <- ggplot(data=plotPars, aes(x=week, y=estimate, group = choice, color = choice)) +
   #geom_line(aes(linetype=inoc.time, colour = trt), size=1.25) +
-  geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
-  geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
-  facet_wrap(~facetgroups, nrow = 2, scales = "free_y") +
+  geom_point(data = plotPars, size=3.5, position = position_dodge(width = 0.9)) +
+  geom_errorbar(data = plotPars, aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  facet_grid(rate~genotype, scales = "free_y") +
+  geom_hline(linetype = 2, yintercept = 0) +
+  scale_color_manual(values = my_palette) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = unique(plotPars$week)) + 
   scale_y_continuous(name = "Rate (per hour)") +
@@ -538,11 +548,15 @@ plotCounts <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
   dplyr::select(-n1, -n2, -n3, -t, -N, -week.genotype) %>% 
   gather(., key = "choice", value = "proportion", xf_plant, test_plant)
 
+## Change choice names to "infected" and "xf-free"
+plotCounts$choice <- ifelse(plotCounts$choice == "xf_plant", "infected", "xf_free")
+
 bgss_counts_plot <- ggplot(data=plotCounts, aes(x=time_from_start_hr, y=proportion, group = choice)) +
   geom_line(aes(colour = choice), size=1.25) +
   #geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
   #geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
-  facet_wrap(~week + genotype, nrow = 4) +
+  facet_grid(week~genotype, scales = "fixed") +
+  scale_color_manual(values = my_palette) +
   scale_x_continuous(name = "Time from start (hr)") + 
   scale_y_continuous(name = "Proportion of BGSS") +
   #limits = c(0,10)) +
@@ -557,3 +571,78 @@ bgss_counts_plot
 
 ggsave("results/figures/2017_figures/pdr1_bgss_counts_time-series_plot_2017.jpg", plot = bgss_counts_plot,
        width = 14, height = 7, units = "in")
+
+#### Example of a single BGSS count plot
+plotCounts1 <- plotCounts %>% dplyr::filter(week == 2 & genotype == "092")
+
+bgss_counts_plot1 <- ggplot(data=plotCounts1, aes(x=time_from_start_hr, y=proportion, group = choice)) +
+  geom_line(aes(colour = choice), size=1.25) +
+  #geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
+  #geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = my_palette) +
+  scale_x_continuous(name = "Time from start (hr)") + 
+  scale_y_continuous(name = "Proportion of BGSS", limits = c(0,1)) +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank())
+bgss_counts_plot1
+
+ggsave("results/figures/2017_figures/pdr1_bgss_counts_time-series_single_plot_2017.jpg", plot = bgss_counts_plot1,
+       width = 14, height = 7, units = "in")
+
+
+
+##########################################################################################################
+#### Estimating rate parameters for each preference cage
+#### To be used in logistic regression model for transmission
+#### Only using the best estimates for each cage; not sure how to incorporate variance
+
+# Add identifier column for each cage
+cmmDataCage <- with(prefdata, data.frame("t" = time_from_start_hr,
+                                         "n1" = xf_plant,
+                                         "n2" = test_plant,
+                                         "n3" = neutral_space,
+                                         "N" = xf_plant + test_plant + neutral_space,
+                                         "cage" = factor(paste(week, block, genotype, trt, rep, sep = "-"))))
+# Remove rows that are NA 
+cmmDataCage <- cmmDataCage %>% dplyr::filter(!is.na(N))
+length(levels(cmmDataCage$cage))
+head(cmmDataCage)
+
+
+#### Fit models to each of the trt-week combinations
+modelFitsCage <- lapply(levels(cmmDataCage$cage), function(x) optimizeCMM(dat = cmmDataCage[cmmDataCage$cage == x,], upperConstraint = 8, aiccN = 8))
+names(modelFitsCage) <- levels(cmmDataCage$cage)
+saveRDS(modelFitsCage, file = "output/CMM_2017_optimx_model_selection_output_per_cage.rds")
+
+#modelFits <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
+
+#### Extract and organize parameter estimates from all models
+paramResultsCage <- lapply(modelFitsCage, function(x) tryCatch(mleTable(x), error = function(e) NA))
+paramResultsCage <- lapply(modelFitsCage, mleTable)
+
+#### Average results for all good models
+paramAverageCage <- lapply(paramResultsCage, function(x) tryCatch(averageModels(x, dAIC.threshold = 7), error = function(e) NA))
+
+paramAverageCage2 <- lapply(paramAverageCage, 
+                            function(x) if(is.na(x)) data.frame("parameter" = c("p1", "p2", "mu1", "mu2"), 
+                                                                "estimate" = rep(NA, 4),
+                                                                "variance" = rep(NA, 4)) else x)
+
+# Add cage identifier to each element of the list and combine into one data.frame
+for(i in 1:length(paramAverageCage)){
+  paramAverageCage[[i]]$cage <- levels(cmmDataCage$cage)[i]
+} 
+paramDataCage <- rbindlist(paramAverageCage) %>% as.data.frame()
+paramDataCage$estimate <- factor2numeric(paramDataCage$estimate)
+paramDataCage$variance <- factor2numeric(paramDataCage$variance)
+
+saveRDS(paramDataCage, file = "output/CMM_2017_rate_parameters_per_cage.rds")
+
+#### Check some of the results
+check1 <- paramDataCage %>% dplyr::filter(grepl("2-2-102R", cage))
+check2 <- paramDataCage %>% dplyr::filter(grepl("14-2-007S", cage))
+                                          
