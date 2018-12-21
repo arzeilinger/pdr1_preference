@@ -285,6 +285,21 @@ AICctab(sympMod, sympTrtMod, sympNoInterxnMod, base = TRUE, delta = TRUE)
 sympTrtMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "quasipoisson")
 plot(sympTrtMod)
 summary(sympTrtMod)
+# transform symptom data
+boxcox(pd_index+1 ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
+sympLM <- lm(log(pd_index+1) ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
+plot(sympLM)
+summary(sympLM)
+# try Ordered logistic regression
+# also called partial odds logistic regression
+transdata$pd_index <- factor(transdata$pd_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
+olrMod <- polr(pd_index ~ week*trt, data = transdata, Hess = TRUE, method = "logistic")
+summary(olrMod)
+# Calculate p values from t statistic
+olrCoefs <- coef(summary(olrMod))
+p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
+(olrCoefs <- cbind(olrCoefs, "p-value" = p))
+# Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 
 #### source xf pop
