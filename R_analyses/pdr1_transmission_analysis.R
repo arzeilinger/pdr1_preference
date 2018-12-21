@@ -357,46 +357,30 @@ ggsave("results/figures/source_xf_pop_scatterplot.jpg", plot = xfscatterplot,
 #### 2017 data
 ##############################################################################################################
 
-#### Importing and munging data
-# Importing from local .xlsx file
-# transdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "test_plant_culturing", detectDates = TRUE)
-# Import from Googlesheets
-pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-                      visibility = "private")
-transdataGS <- gs_read(pdr1DataURL, ws = "test_plant_culturing")
-transdata <- transdataGS
+transdata17 <- readRDS("output/pdr1_transmission_preference_dataset_2017.rds")
 
-# Remove Control plant samples
-transdata <- transdata %>% dplyr::filter(!grepl("CTRL", genotype))
-
-# Combine test_plant_infection_1 and test_plant_infection_2 columns
-# In all cases, when I re-cultured a sample (test_plant_infection_2), the results were the same as the 1st time or more reliable
-# So go with test_plant_infection_2 results when they are available
-transdata$test_plant_infection <- with(transdata, ifelse(!is.na(test_plant_infection_2), test_plant_infection_2, test_plant_infection_1)) %>% as.integer()                                      
-
-# Fix column classes
-transdata$genotype <- factor(transdata$genotype)
-transdata$trt <- factor(transdata$trt)
-transdata$block <- factor(transdata$block)
-
-str(transdata)
-summary(transdata)
-
-
-
-#####################################################################################################################################
 #### Analysis of PD symptoms using ANCOVA
 # pdMod1 includes week:genotype interaction, which tests for different slopes and intercepts
-boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transdata, lambda = seq(-2, 2, by=0.5))
+boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transdata17, lambda = seq(-2, 2, by=0.5))
 # Best transmformation is inverse sqrt; residuals don't look great, but better that with a quasipoisson GLM
-pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transdata)
+pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transdata17)
 plot(pdMod1)
 anova(pdMod1)
 summary(pdMod1)
+## Analysis of PD symptoms using Partial Odds Logistic Regression
+transdata17$PD_symptoms_index <- factor(transdata17$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
+olrMod <- polr(PD_symptoms_index ~ block + week*genotype, data = transdata17, Hess = TRUE, method = "logistic")
+summary(olrMod)
+# Calculate p values from t statistic
+olrCoefs <- coef(summary(olrMod))
+p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
+(olrCoefs <- cbind(olrCoefs, "p-value" = p))
+# Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
+
 
 
 # Summarising and plotting
-pdSummary <- transdata %>% group_by(week, genotype, trt) %>% 
+pdSummary <- transdata17 %>% group_by(week, genotype, trt) %>% 
   summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
             sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
 

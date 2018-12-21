@@ -120,3 +120,35 @@ transdata
 #### Save final data set, including culturing/transmission/symptom data, CMM parameter estimates, and vector acquisition/qPCR data
 saveRDS(transdata, file = "output/pdr1_transmission_preference_dataset.rds")
 
+
+
+##############################################################################################################
+##############################################################################################################
+#### 2017 data
+##############################################################################################################
+#### Importing and munging data
+# Importing from local .xlsx file
+# transdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "test_plant_culturing", detectDates = TRUE)
+# Import from Googlesheets
+pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
+                      visibility = "private")
+transdataGS <- gs_read(pdr1DataURL, ws = "test_plant_culturing")
+transdata17 <- transdataGS
+
+# Remove Control plant samples
+transdata17 <- transdata17 %>% dplyr::filter(!grepl("CTRL", genotype))
+
+# Combine test_plant_infection_1 and test_plant_infection_2 columns
+# In all cases, when I re-cultured a sample (test_plant_infection_2), the results were the same as the 1st time or more reliable
+# So go with test_plant_infection_2 results when they are available
+transdata17$test_plant_infection <- with(transdata17, ifelse(!is.na(test_plant_infection_2), test_plant_infection_2, test_plant_infection_1)) %>% as.integer()                                      
+
+# Fix column classes
+transdata17$genotype <- factor(transdata17$genotype)
+transdata17$trt <- factor(transdata17$trt)
+transdata17$block <- factor(transdata17$block)
+
+str(transdata17)
+summary(transdata17)
+
+saveRDS(transdata17, file = "output/pdr1_transmission_preference_dataset_2017.rds")
