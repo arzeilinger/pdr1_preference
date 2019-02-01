@@ -4,7 +4,7 @@
 rm(list = ls())
 # libraries
 # loading dtplyr that replaces dplyr and data.table
-my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "googlesheets")
+my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "googlesheets", "modeest")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/qpcrFunctions.R")
@@ -116,22 +116,28 @@ nameCheck[which(nameCheck$sample2 != paste("(", nameCheck$trt, nameCheck$rep, ")
 # I checked and the insect_code is correct, sample2 is incorrect
 
 # Look at discrepancies between qPCR duplicates
-repCheck <- vectorData %>% group_by(tube_code) %>% summarise(mean = mean(Cq, na.rm = TRUE), 
-                                                             min = min(Cq, na.rm = TRUE), 
-                                                             max = max(Cq, na.rm = TRUE))
-repCheck$diff <- repCheck$max - repCheck$min
-hist(repCheck$diff)
-# Select only those samples that have medium to large differences between duplicates
-badReps <- repCheck[repCheck$diff > 5,]
-badReps %>% print(., n = nrow(.))
-# Samples to prioritize for re-running qPCR
-badRepData <- vectorData %>% dplyr::filter(vectorData$tube_code %in% badReps$tube_code) %>% 
-  dplyr::select(tube_code, insect_code, week, Cq, Quality_checks) %>%
-  dplyr::filter(!is.na(insect_code))
-badRepData %>% print.data.frame
-length(unique(badRepData$tube_code))
+#### Summarize duplicates. 
+vectorData[vectorData$Cq >= 41, "Cq"] <- 0
+repCheck <- vectorData %>% group_by(tube_code) %>% summarise(minCq = min(Cq, na.rm = TRUE),
+                                                             maxCq = max(Cq, na.rm = TRUE),
+                                                             maxDiff = maxCq - minCq,
+                                                             # round Cq values to nearest 10 then calculate the mode (most common value)
+                                                             # Not sure this modeCq is working correctly, need to check it, maybe try other mode functions
+                                                             #modeCq = mfv(round(Cq, digits = -1))[1], 
+                                                             nSample = length(Cq),
+                                                             # Need to carryover experiment IDs
+                                                             trt = first(trt),
+                                                             treatment = first(treatment),
+                                                             rep = first(rep),
+                                                             week = first(week))
 
-write.csv(badRepData, file = "output/qpcr_bad_replicates.csv", row.names = FALSE)
+## Samples that have a large difference among duplicates and need to be run again
+badReps <- repCheck %>% dplyr::filter(maxDiff > 5) %>% mutate("tube_code" = as.numeric(tube_code)) %>%
+  dplyr::filter(!is.na(tube_code)) 
+badReps %>% print.data.frame()
+badReps %>% nrow()
+
+write.csv(badReps, file = "output/qpcr_bad_replicates_2016.csv", row.names = FALSE)
 
 
 #### Select samples to run again, to try to improve efficiency (2018-03-01)
