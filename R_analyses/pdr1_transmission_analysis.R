@@ -19,21 +19,22 @@ source("R_functions/factor2numeric.R")
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
 transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
 transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
+str(transdata)
 
 #### symptom data
-sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
-sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "poisson")
-sympNoInterxnMod <- glm(pd_index ~ week + trt, data = transdata, family = "poisson")
-AICctab(sympMod, sympTrtMod, sympNoInterxnMod, base = TRUE, delta = TRUE)
-# sympTrtMod (with interaction) is best and quasipoisson distribution is best, AIC won't work with quasipoisson
-sympTrtMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "quasipoisson")
-plot(sympTrtMod)
-summary(sympTrtMod)
-# Linear model with transformed symptom data
-boxcox(pd_index+1 ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
-sympLM <- lm(log(pd_index+1) ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
-plot(sympLM)
-summary(sympLM)
+# sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
+# sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "poisson")
+# sympNoInterxnMod <- glm(pd_index ~ week + trt, data = transdata, family = "poisson")
+# AICctab(sympMod, sympTrtMod, sympNoInterxnMod, base = TRUE, delta = TRUE)
+# # sympTrtMod (with interaction) is best and quasipoisson distribution is best, AIC won't work with quasipoisson
+# sympTrtMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "quasipoisson")
+# plot(sympTrtMod)
+# summary(sympTrtMod)
+# # Linear model with transformed symptom data
+# boxcox(pd_index+1 ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
+# sympLM <- lm(log(pd_index+1) ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
+# plot(sympLM)
+# summary(sympLM)
 # Ordered logistic regression
 # also called partial odds logistic regression
 transdata$pd_index <- factor(transdata$pd_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
@@ -46,134 +47,12 @@ p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 
-
-
-
-
-#### Analyzing acquisition data at the per-vector level, with cage as a random effect
-acqDataVector$cage <- with(acqDataVector, paste(week, trt, rep, sep = ""))
-acqDataVector$vectorcfu <- floor(acqDataVector$vectorcfu)
-
-# Analysis of CFU data
-acqMod <- glmer(vectorcfu ~ week*trt + (1|cage),
-                data = acqDataVector, family = "poisson")
-summary(acqMod)
-
-# Analysis of infection status
-acqDataVector$vectorInfected <- ifelse(acqDataVector$vectorcfu > 0, 1, 0) # Turn CFUs into binomial presence/absence
-infectedMod <- glmer(vectorInfected ~ week*trt + (1|cage),
-                     data = acqDataVector, family = "binomial")
-summary(infectedMod)
-
-
-acqSummary <- acqDataCage %>% group_by(week, trt) %>% summarise(meancfu = mean(cagecfu),
-                                                                secfu = sd(cagecfu)/sqrt(length(cagecfu[!is.na(cagecfu)])),
-                                                                logMeancfu = mean(logCagecfu),
-                                                                logSEcfu = sd(logCagecfu)/sqrt(length(logCagecfu[!is.na(logCagecfu)])),
-                                                                meanPercInfected = mean(propVectorInfected)*100,
-                                                                sePercInfected = sd(propVectorInfected)/sqrt(length(propVectorInfected[!is.na(propVectorInfected)]))*100)
-acqSummary
-
-#### Plotting
-## Mean CFU
-vectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=meancfu)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Xylella CFU/vector") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-vectorxfplot
-ggsave("results/figures/vector_xf_line_plot.jpg", plot = vectorxfplot,
-       width = 7, height = 7, units = "in")
-
-
-## Log mean CFU
-logvectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=logMeancfu)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  geom_errorbar(aes(ymax=logMeancfu+logSEcfu, ymin=logMeancfu-logSEcfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Xylella CFU per vector (log10 transformed)") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-logvectorxfplot
-ggsave("results/figures/vector_xf_line_plot_log.jpg", plot = logvectorxfplot,
-       width = 7, height = 7, units = "in")
-
-
-## Proportion of vectors infected
-propInfectiousplot <- ggplot(acqSummary, aes(x=week, y=meanPercInfected)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  geom_errorbar(aes(ymax=meanPercInfected+sePercInfected, ymin=meanPercInfected-sePercInfected), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Mean percent vectors positive for X. fastidiosa",
-                     limits = c(0,100)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-propInfectiousplot
-ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfectiousplot,
-       width = 7, height = 7, units = "in")
-
 #############################################################################################################
 #### Transmission models
-transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
-transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
-transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
-str(transdata)
 
-# Remove the second 12-week trials and NAs
-transdata <- transdata %>% dplyr::filter(., week != 12.2, !is.na(pd_index) & !is.na(pd_index2))
-
-#### Model selection on PD symptom index
-pdMod1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
-pdMod2 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index2, data = transdata, family = "binomial")
-# I think quasibinomial distribution might be better but then it doesn't calculate an AIC value. Need to look into this.
-AICtab(pdMod1, pdMod2, base = TRUE)
-plot(pdMod2)
-summary(pdMod2)
-# PD indices are essentially the same; go with Arash's index
-
-# Re-load data set to retain data points that are NA for pd indices
-transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
-transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
-transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
+FullModel <- glm(test.plant.infection ~ week*trt + propVectorInfected + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "quasibinomial")
+plot(FullModel)
+summary(FullModel)
 
 
 #### Model selection on preference rate parameters
@@ -348,6 +227,103 @@ xfscatterplot <- ggplot(data=transdata, aes(x=week, y=(source.cfu.per.g/1000000)
 
 xfscatterplot
 ggsave("results/figures/source_xf_pop_scatterplot.jpg", plot = xfscatterplot,
+       width = 7, height = 7, units = "in")
+
+
+
+######################################################################################################################
+#### Analyzing acquisition data at the per-vector level, with cage as a random effect
+acqDataVector <- readRDS("output/pdr1_2016_vector_cfu_dataset.rds")
+str(acqDataVector)
+acqDataVector$week.cage <- with(acqDataVector, paste(week, trt, rep, sep = ""))
+acqDataVector$vectorcfu <- floor(acqDataVector$vectorcfu)
+
+# Analysis of CFU data
+acqMod <- glmer(vectorcfu ~ week*trt + (1|week.cage), data = acqDataVector, family = "poisson")
+summary(acqMod)
+
+# Analysis of infection status
+acqDataVector$vectorInfected <- ifelse(acqDataVector$vectorcfu > 0, 1, 0) # Turn CFUs into binomial presence/absence
+infectedMod <- glmer(vectorInfected ~ week*trt + (1|week.cage), data = acqDataVector, family = "binomial")
+summary(infectedMod)
+
+
+#### Plotting
+## Use transdata data set for plotting, b/c data are at the cage level
+## Mean CFU
+vectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=meancfu)) +
+  # geom_bar(position=position_dodge(), stat="identity", 
+  #          aes(fill=trt)) +
+  # geom_hline(aes(yintercept=50), linetype="dashed") +
+  geom_line(aes(linetype=trt), size=1.25) +
+  geom_point(aes(shape=trt), size=2.5) +
+  geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Xylella CFU/vector") +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+vectorxfplot
+ggsave("results/figures/vector_xf_line_plot.jpg", plot = vectorxfplot,
+       width = 7, height = 7, units = "in")
+
+
+## Log mean CFU
+logvectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=logMeancfu)) +
+  # geom_bar(position=position_dodge(), stat="identity", 
+  #          aes(fill=trt)) +
+  # geom_hline(aes(yintercept=50), linetype="dashed") +
+  geom_line(aes(linetype=trt), size=1.25) +
+  geom_point(aes(shape=trt), size=2.5) +
+  geom_errorbar(aes(ymax=logMeancfu+logSEcfu, ymin=logMeancfu-logSEcfu), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Xylella CFU per vector (log10 transformed)") +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+logvectorxfplot
+ggsave("results/figures/vector_xf_line_plot_log.jpg", plot = logvectorxfplot,
+       width = 7, height = 7, units = "in")
+
+
+## Proportion of vectors infected
+propInfectiousplot <- ggplot(acqSummary, aes(x=week, y=meanPercInfected)) +
+  # geom_bar(position=position_dodge(), stat="identity", 
+  #          aes(fill=trt)) +
+  # geom_hline(aes(yintercept=50), linetype="dashed") +
+  geom_line(aes(linetype=trt), size=1.25) +
+  geom_point(aes(shape=trt), size=2.5) +
+  geom_errorbar(aes(ymax=meanPercInfected+sePercInfected, ymin=meanPercInfected-sePercInfected), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Mean percent vectors positive for X. fastidiosa",
+                     limits = c(0,100)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+propInfectiousplot
+ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfectiousplot,
        width = 7, height = 7, units = "in")
 
 

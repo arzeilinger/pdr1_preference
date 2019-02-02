@@ -94,6 +94,8 @@ acqDataVector$week <- as.numeric(acqDataVector$week)
 acqDataVector$rep <- as.numeric(acqDataVector$rep)
 str(acqDataVector)
 
+saveRDS(acqDataVector, file = "output/pdr1_2016_vector_cfu_dataset.rds")
+
 #### Constructing vector infection index
 # In each trial, I have Xf pops for each of the vectors. I could include in transmission model:
 # total Xf population among all vectors
@@ -116,6 +118,20 @@ transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")
 
 transdata <- left_join(transdata, acqDataCage, by = c("week.cage", "week", "trt", "rep"))
 transdata
+
+
+
+#### Model selection on PD symptom index
+pdMod1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
+pdMod2 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index2, data = transdata, family = "binomial")
+# I think quasibinomial distribution might be better but then it doesn't calculate an AIC value. Need to look into this.
+AICtab(pdMod1, pdMod2, base = TRUE)
+plot(pdMod2)
+summary(pdMod2)
+# PD indices are essentially the same; go with Arash's index
+## Remove pd_index2 column; pd_index shows similar results and was the same used by Arash/Krivanek papers
+transdata <- transdata %>% dplyr::select(-pd_index2)
+
 
 #### Save final data set, including culturing/transmission/symptom data, CMM parameter estimates, and vector acquisition/qPCR data
 saveRDS(transdata, file = "output/pdr1_transmission_preference_dataset.rds")
