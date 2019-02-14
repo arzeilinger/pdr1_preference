@@ -74,16 +74,25 @@ diagnosticsFullModel <- testResiduals(simResFullModel)
 summary(FullModel)
 
 
-#### Transmission analysis using elastic net and the glmnetUtils package
+#### Transmission analysis using elastic net 
+## Define lambda values
+lambdas <- 2^seq(-1, -8, length = 20)
+#### Using the glmnetUtils package
 transdata$week.trt <- with(transdata, paste(week, trt, sep = "")) %>% factor() %>% as.numeric()
 transdata$trtNumeric <- as.numeric(transdata$trt) - 1
-enetTransdata <- transdata %>% mutate(log.source.cfu = log10(source.cfu.per.g+1)) %>%
-  #test.plant.infection = factor(ifelse(test.plant.infection == 1, "infected", "non_infected"))) %>%
+enetTransdata <- transdata %>% mutate(log.source.cfu = log10(source.cfu.per.g+1),
+  test.plant.infection = factor(ifelse(test.plant.infection == 1, "infected", "non_infected"))) %>%
   dplyr::select(week, trtNumeric, week.trt, log.source.cfu, test.plant.infection,
                 pd_index, mu1, mu2, p1, p2, propVectorInfected) %>%
   dplyr::filter(complete.cases(.))
 str(enetTransdata)
-enetTransCV <- cva.glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial")
+
+#### Look at relationships of the variables
+enetTransdata %>% mutate(test.plant.infection = ifelse(test.plant.infection == "infected", 1, 0)) %>% pairs()
+
+#### Cross-validation
+enetTransCV <- cva.glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial",
+                          type.measure = "deviance", nfolds = 5, lambda = lambdas)
 enetTransCV
 plot(enetTransCV)
 minlossplot(enetTransCV)
@@ -97,27 +106,23 @@ enetResults1 <- coef(ridgeTrans, s = bestLambda)
 
 
 #### Transmission analysis using elastic net and the caret package
-enetCaretdata <- enetTransdata
-enetCaretdata$test.plant.infection <- factor(ifelse(enetTransdata$test.plant.infection == 1, "infected", "noninfected"))
-train_index <- createDataPartition(y = enetCaretdata$test.plant.infection, p = 1, list = F, times = 1)
+# enetCaretdata <- enetTransdata
+# enetCaretdata$test.plant.infection <- factor(ifelse(enetTransdata$test.plant.infection == 1, "infected", "noninfected"))
+#train_index <- createDataPartition(y = enetCaretdata$test.plant.infection, p = 1, list = F, times = 1)
 ## Glmnet wants the data to be matrices, not data frames.
-x_train <- as.matrix(enetCaretdata[train_index, !names(enetCaretdata) == "test.plant.infection"])
-x_test <- as.matrix(enetCaretdata[-train_index, !names(enetCaretdata) == "test.plant.infection"])
-y_train <- enetCaretdata[train_index, "test.plant.infection"]
-y_train <- factor(y_train)
-y_test <- enetCaretdata[-train_index, "test.plant.infection"]
-y_test <- factor(y_test)
+x_train <- as.matrix(enetTransdata[, !names(enetCaretdata) == "test.plant.infection"])
+y_train <- enetTransdata[, "test.plant.infection"]
 
 ## Set up trainControl
-train_control = trainControl(method = "repeatedcv",
-                             number = 10, repeats = 5,
+train_control = trainControl(method = "cv",
+                             number = 5, returnResamp = "all",
                              classProbs = TRUE, summaryFunction = twoClassSummary,
                              savePredictions = "final")
 ## Create a custom tuning grid.
 enet_grid = expand.grid(alpha = seq(0, 1, length.out = 5),
-                        lambda = 2^seq(-2, -7, length = 7)) # doing an exponential scale allows to explore more space of lambda values
+                        lambda = lambdas) # doing an exponential scale allows to explore more space of lambda values
 enet = train(x_train, y_train, method = "glmnet",
-             metric = "ROC",
+             metric = "deviance",
              preProcess = c("center", "scale"),
              tuneGrid = enet_grid,
              trControl = train_control)
@@ -126,12 +131,15 @@ plot(enet)
 enet$bestTune
 (enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
 
-bestenet <- glmnetUtils::glmnet(test.plant.infection ~ ., family = "binomial", alpha = enet$bestTune$alpha, data = enetCaretdata)
+bestenet <- glmnetUtils::glmnet(test.plant.infection ~ ., family = "binomial", alpha = enet$bestTune$alpha, data = enetTransdata)
 enetResults3 <- coef(bestenet, s = enet$bestTune$lambda)
 cbind(enetResults1, enetResults2, enetResults3)
 
-## The results from cva.glmnet and caret cv might be similar but I need to investigate how to tune them better. Need to explore caret more
-## It looks like the signs of the coefficients are switched; this may be because caret only accepts the binomial response as text values
+## caret produces similar results to cva.glmnet when the bestTune parameters are fed into glmnet again to get the final model
+## but extracting the finalModel from the train object produces different coefficient estimates
+## This makes no sense
+
+qplot(x = log10(source.cfu.per.g+1), y = jitter(test.plant.infection), data = transdata)
 
 #######################################################################################################
 #### Plotting
