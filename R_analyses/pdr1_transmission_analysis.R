@@ -2,11 +2,21 @@
 
 rm(list = ls())
 # Load packages
-my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googlesheets",
-                 "lme4", "ggplot2", "bbmle", "multcomp")
+my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googlesheets", "caret",
+                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "glmnet", "glmnetUtils")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
+
+
+#### Load combined and filtered transmission/preference data set
+# Remove second 12-week set of trials
+transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
+transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
+transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
+transdata$trt <- factor(transdata$trt)
+str(transdata)
+
 
 
 ######################################################################################################################
@@ -15,13 +25,6 @@ source("R_functions/factor2numeric.R")
 ######################################################################################################################
 
 #### Analysis of PD symptom data
-# Remove second 12-week set of trials
-transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
-transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
-transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
-str(transdata)
-
-#### symptom data
 # sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
 # sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "poisson")
 # sympNoInterxnMod <- glm(pd_index ~ week + trt, data = transdata, family = "poisson")
@@ -48,72 +51,87 @@ p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
 
 
 #############################################################################################################
+#### source xf pop
+## Data look overdispesed: try negative binomial GLM (MASS package)
+sourcexfNB <- glm.nb(source.cfu.per.g ~ week*trt, data = transdata)
+summary(sourcexfNB)
+## Results are way off, don't make sense. Looks like model fitting didn't work
+## Try quasi-poisson
+sourcexfQP <- glm(source.cfu.per.g ~ week*trt, data = transdata, family = "quasipoisson")
+plot(sourcexfQP)
+summary(sourcexfQP)
+## Even though the error variance is highly skewed, the results make sense
+
+
+#############################################################################################################
 #### Transmission models
 
-FullModel <- glm(test.plant.infection ~ week*trt + propVectorInfected + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "quasibinomial")
-plot(FullModel)
+FullModel <- glm(test.plant.infection ~ week*trt + propVectorInfected + source.cfu.per.g + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
+simResFullModel <- simulateResiduals(FullModel, n = 1000)
+plot(simResFullModel)
+diagnosticsFullModel <- testResiduals(simResFullModel)
+## Model diagnostics suggest a good model
 summary(FullModel)
 
 
-#### Model selection on preference rate parameters
-FullModel <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
-prefModChoice1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + mu1 + pd_index, data = transdata, family = "binomial")
-prefModp1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + p1 + pd_index, data = transdata, family = "binomial")
-prefModmu1 <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + mu1 + pd_index, data = transdata, family = "binomial")
-prefModnull <- glm(test.plant.infection ~ week*trt + log10(source.cfu.per.g+1) + pd_index, data = transdata, family = "binomial")
-
-AICtab(FullModel, prefModChoice1, prefModp1, prefModmu1, prefModnull, base = TRUE)
-# Including only mu1 model is best
-summary(prefModmu1)
-
-
-#### Model selection to include source xf pop and PD index
-# start from prefModmu1
-noSourceMod <- glm(test.plant.infection ~ week*trt*mu1*pd_index, data = transdata, family = "binomial")
-noPDMod <- glm(test.plant.infection ~ week*trt*log10(source.cfu.per.g+1)*mu1, data = transdata, family = "binomial")
-trtprefMod <- glm(test.plant.infection ~ week*trt*mu1, data = transdata, family = "binomial")
-trtMod <- glm(test.plant.infection ~ week*trt, data = transdata, family = "binomial")
-noIntrxnMod <- glm(test.plant.infection ~ week + trt, data = transdata, family = "binomial")
-
-AICctab(noSourceMod, noPDMod, trtprefMod, trtMod, noIntrxnMod, base = TRUE)
-# trtMod seems best
-summary(noIntrxnMod)
-
-# Contrast testing difference in transmission between genotypes at 12 weeks
-transdata$week.trt <- with(transdata, factor(paste(week, trt, sep = ".")))
-trtModMC <- glm(test.plant.infection ~ week.trt, data = transdata, family = "binomial")
-transContrastTest <- glht(trtModMC, linfct = mcp(week.trt = "Tukey"))
-summary(transContrastTest)
+#### Transmission analysis using elastic net and the glmnetUtils package
+transdata$week.trt <- with(transdata, paste(week, trt, sep = "")) %>% factor() %>% as.numeric()
+transdata$trtNumeric <- as.numeric(transdata$trt) - 1
+enetTransdata <- transdata %>% mutate(log.source.cfu = log10(source.cfu.per.g+1)) %>%
+  #test.plant.infection = factor(ifelse(test.plant.infection == 1, "infected", "non_infected"))) %>%
+  dplyr::select(week, trtNumeric, week.trt, log.source.cfu, test.plant.infection,
+                pd_index, mu1, mu2, p1, p2, propVectorInfected) %>%
+  dplyr::filter(complete.cases(.))
+str(enetTransdata)
+enetTransCV <- cva.glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial")
+enetTransCV
+plot(enetTransCV)
+minlossplot(enetTransCV)
+## alpha = 0 looks best, meaning ridge regression
+## Plot just the cv.glmnet output for alpha = 0, which is the first in the list of cv.glmnet objects
+plot(enetTransCV$modlist[[1]])
+enetTransCV$modlist[[1]]
+bestLambda <- enetTransCV$modlist[[1]]$lambda.min
+ridgeTrans <- glmnetUtils::glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial", alpha = 0)
+enetResults1 <- coef(ridgeTrans, s = bestLambda)
 
 
+#### Transmission analysis using elastic net and the caret package
+enetCaretdata <- enetTransdata
+enetCaretdata$test.plant.infection <- factor(ifelse(enetTransdata$test.plant.infection == 1, "infected", "noninfected"))
+train_index <- createDataPartition(y = enetCaretdata$test.plant.infection, p = 1, list = F, times = 1)
+## Glmnet wants the data to be matrices, not data frames.
+x_train <- as.matrix(enetCaretdata[train_index, !names(enetCaretdata) == "test.plant.infection"])
+x_test <- as.matrix(enetCaretdata[-train_index, !names(enetCaretdata) == "test.plant.infection"])
+y_train <- enetCaretdata[train_index, "test.plant.infection"]
+y_train <- factor(y_train)
+y_test <- enetCaretdata[-train_index, "test.plant.infection"]
+y_test <- factor(y_test)
 
+## Set up trainControl
+train_control = trainControl(method = "repeatedcv",
+                             number = 10, repeats = 5,
+                             classProbs = TRUE, summaryFunction = twoClassSummary,
+                             savePredictions = "final")
+## Create a custom tuning grid.
+enet_grid = expand.grid(alpha = seq(0, 1, length.out = 5),
+                        lambda = 2^seq(-2, -7, length = 7)) # doing an exponential scale allows to explore more space of lambda values
+enet = train(x_train, y_train, method = "glmnet",
+             metric = "ROC",
+             preProcess = c("center", "scale"),
+             tuneGrid = enet_grid,
+             trControl = train_control)
+print(enet)
+plot(enet)
+enet$bestTune
+(enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
 
-#### source xf pop
-boxcox(source.cfu.per.g + 1 ~ week*trt, data = transdata, lambda = seq(-2, 2, by=0.5))
+bestenet <- glmnetUtils::glmnet(test.plant.infection ~ ., family = "binomial", alpha = enet$bestTune$alpha, data = enetCaretdata)
+enetResults3 <- coef(bestenet, s = enet$bestTune$lambda)
+cbind(enetResults1, enetResults2, enetResults3)
 
-sourcexfMod <- lm(log10(source.cfu.per.g+1) ~ week*trt, data = transdata)
-sourceNoInterxnMod <- lm(log10(source.cfu.per.g+1) ~ week + trt, data = transdata)
-AICctab(sourcexfMod, sourceNoInterxnMod, base = TRUE)
-
-plot(sourceNoInterxnMod)
-summary(sourceNoInterxnMod)
-
-# Multiple comparison testing difference in transmission between genotypes at 12 weeks
-sourceModMC <- lm(log10(source.cfu.per.g+1) ~ week.trt, data = transdata)
-transContrastTest <- glht(sourceModMC, linfct = mcp(week.trt = "Tukey"))
-summary(transContrastTest)
-
-
-## Proportion of source plants infected by week and trt
-transdata$source.plant.infection <- ifelse(transdata$source.cfu.per.g == 0, 0, 1)
-sourceProp <- transdata %>% group_by(., week, trt) %>% summarise(propInfected = sum(source.plant.infection, na.rm = TRUE)/sum(!is.na(source.plant.infection)))
-sourceProp
-
-sourcePropMod <- glm(source.plant.infection ~ week*trt, data = transdata, family = "binomial")
-summary(sourcePropMod)
-# Need to use Firth's correction
-sourcePropMod <- logistf(source.plant.infection ~ week*trt, data = transdata)
-summary(sourcePropMod)
+## The results from cva.glmnet and caret cv might be similar but I need to investigate how to tune them better. Need to explore caret more
+## It looks like the signs of the coefficients are switched; this may be because caret only accepts the binomial response as text values
 
 #######################################################################################################
 #### Plotting
