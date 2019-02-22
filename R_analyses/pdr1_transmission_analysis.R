@@ -9,6 +9,11 @@ lapply(my.packages, require, character.only = TRUE)
 source("R_functions/factor2numeric.R")
 
 
+######################################################################################################################
+######################################################################################################################
+#### Analysis of 2016 data
+######################################################################################################################
+
 #### Load combined and filtered transmission/preference data set
 # Remove second 12-week set of trials
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
@@ -16,13 +21,6 @@ transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
 transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
 transdata$trt <- factor(transdata$trt)
 str(transdata)
-
-
-
-######################################################################################################################
-######################################################################################################################
-#### Analysis of 2016 data
-######################################################################################################################
 
 #### Analysis of PD symptom data
 # sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
@@ -259,18 +257,15 @@ ggsave("results/figures/source_xf_pop_scatterplot.jpg", plot = xfscatterplot,
 
 ######################################################################################################################
 #### Analyzing acquisition data at the per-vector level, with cage as a random effect
-acqDataVector <- readRDS("output/pdr1_2016_vector_cfu_dataset.rds")
+acqDataVector <- readRDS("output/pdr1_2016_vector_acquisition_dataset.rds")
 str(acqDataVector)
-acqDataVector$week.cage <- with(acqDataVector, paste(week, trt, rep, sep = ""))
-acqDataVector$vectorcfu <- floor(acqDataVector$vectorcfu)
 
 # Analysis of CFU data
 acqMod <- glmer(vectorcfu ~ week*trt + (1|week.cage), data = acqDataVector, family = "poisson")
 summary(acqMod)
 
 # Analysis of infection status
-acqDataVector$vectorInfected <- ifelse(acqDataVector$vectorcfu > 0, 1, 0) # Turn CFUs into binomial presence/absence
-infectedMod <- glmer(vectorInfected ~ week*trt + (1|week.cage), data = acqDataVector, family = "binomial")
+infectedMod <- glmer(vectorInfectious ~ week*trt + (1|week.cage), data = acqDataVector, family = "binomial")
 summary(infectedMod)
 
 

@@ -89,12 +89,17 @@ str(acqData)
 # Remove one crazy outlier!
 acqData <- acqData %>% dplyr::filter(!(tube_code == 117 & wellNumber == 60))
 # Simplify data set
-acqDataVector <- acqData %>% dplyr::select(week, trt, rep, tube_code, cfu) %>% group_by(week, trt, rep, tube_code) %>% summarise(vectorcfu = mean(cfu))
+acqDataVector <- acqData %>% dplyr::select(week, trt, rep, tube_code, cfu, vectorInfected) %>% 
+  group_by(week, trt, rep, tube_code) %>% 
+  summarise(vectorcfu = mean(cfu),
+            vectorInfectious = ifelse(any(vectorInfected == 1), 1, 0))
 acqDataVector$week <- as.numeric(acqDataVector$week)
 acqDataVector$rep <- as.numeric(acqDataVector$rep)
+acqDataVector$week.cage <- factor(with(acqDataVector, paste(week, trt, rep, sep = "")))
+acqDataVector$vectorcfu <- as.integer(acqDataVector$vectorcfu)
 str(acqDataVector)
 
-saveRDS(acqDataVector, file = "output/pdr1_2016_vector_cfu_dataset.rds")
+saveRDS(acqDataVector, file = "output/pdr1_2016_vector_acquisition_dataset.rds")
 
 #### Constructing vector infection index
 # In each trial, I have Xf pops for each of the vectors. I could include in transmission model:

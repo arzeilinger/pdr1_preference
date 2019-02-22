@@ -106,6 +106,58 @@ saveRDS(vectorData, file = "output/pdr1_2016_vector_cfu_from_qpcr.rds")
 vectorData <- readRDS("output/pdr1_2016_vector_cfu_from_qpcr.rds")
 
 
+
+#####################################################################################################
+#### Re-running 2016 PdR1 vector DNA extracts on qPCR
+
+qpcrDir <- "data/2016_data/qpcr_data/"
+
+#### Import plate setup 
+## From googlesheets (Michael's template)
+# tsgs_url <- gs_url("https://docs.google.com/spreadsheets/d/1Xi-S8UeRQWufjaeWKYzJYN590kHX0qOJ2kweCVVg8Kw/edit#gid=0",
+#                   visibility = "private")
+# plateSetup1 <- gs_read(tsgs_url, ws = 1, range = "A6:M14")  %>% transformPlateSetupcsv()
+
+## From excel file
+plateSetup <- read.xlsx(paste(qpcrDir, "2019-02-07_pdr1_qpcr_plate_setup.xlsx", sep = ""), 
+                        sheet = 1, rows = c(6:14), cols = c(1:13)) %>% 
+  transformPlateSetupcsv()
+
+#### Read in lineRegPCR file
+qpcrOutput <- readLinReg(file = "2019-02-07_pdr1.xlsx", dir = qpcrDir) %>%
+  left_join(., plateSetup[,c("wellNumber", "sample")], by = "wellNumber") %>%
+  dplyr::filter(., !is.na(sample))
+qpcrOutput$Cq[qpcrOutput$Cq >= 41] <- 0
+
+# Looking at results
+(qpcrCheck <- qpcrOutput[,c("Cq", "N0", "sample", "Sample_Use", "Quality_checks")] %>% arrange(., Cq)) 
+# I think Sanjeet switched 2PC (+ control) with NTC (- control) samples
+
+#### Merge these re-run samples with the final 2016 data set
+#### FINAL DATA SET
+vectorData <- readRDS("output/pdr1_2016_vector_cfu_from_qpcr.rds")
+
+## filter to just 2016 vectors; use the fact that the 2017 samples are the largest numbers
+qpcrOutput <- qpcrOutput %>% mutate(sampleNum = as.numeric(sample)) %>% arrange(sampleNum)
+rerun16 <- qpcrOutput %>% dplyr::filter(sampleNum < 800 & !is.na(sampleNum))
+
+## Merge rerun samples data with tubeCodes data set
+rerun16 <- rerun16 %>% 
+  dplyr::select(-sampleNum) %>%
+  left_join(., tubeCodes, by = c("sample" = "tube_code")) %>% 
+  rename(tube_code = sample) # Switch name to tube_code to match vectorData
+## rbind rerun samples with vectorData
+vectorData2 <- list(vectorData, rerun16) %>% rbindlist(., fill = TRUE)
+
+#### Clean up data set
+## Define vector infection status based on Cq
+vectorData2$vectorInfected <- ifelse(vectorData2$Cq > 0 & vectorData2$Cq < 41, 1, 0) 
+
+## Save data set with rerun samples
+saveRDS(vectorData2, file = "output/pdr1_2016_vector_cfu_from_qpcr.rds")
+
+
+
 #################################################################################################################
 ## Data quality checkts
 # check that the genotype-rep codes align between data sets, where they were included in the pcr sample names
@@ -166,32 +218,4 @@ samplecodes <- as.numeric(samplecodes$tube_code) %>% unique() %>% sort()
 # Yes, so I can set up re-run plates with consequtive tube-code numbers 
 
 
-
-#####################################################################################################
-#### Re-running 2016 PdR1 vector DNA extracts on qPCR
-
-qpcrDir <- "data/2016_data/qpcr_data/"
-
-#### Import plate setup 
-## From googlesheets (Michael's template)
-# tsgs_url <- gs_url("https://docs.google.com/spreadsheets/d/1Xi-S8UeRQWufjaeWKYzJYN590kHX0qOJ2kweCVVg8Kw/edit#gid=0",
-#                   visibility = "private")
-# plateSetup1 <- gs_read(tsgs_url, ws = 1, range = "A6:M14")  %>% transformPlateSetupcsv()
-
-## From excel file
-plateSetup <- read.xlsx(paste(qpcrDir, "2018-04-23_pdr1_2016_rerun_plate_setup.xlsx", sep = ""), 
-                        sheet = 1, rows = c(6:14), cols = c(1:13)) %>% 
-  transformPlateSetupcsv()
-
-#### Read in lineRegPCR file
-qpcrOutput <- readLinReg(file = "2018-04-23_pdr1_2016_rerun.xlsx", dir = qpcrDir) %>%
-  left_join(., plateSetup[,c("wellNumber", "sample")], by = "wellNumber") #%>%
-  #dplyr::filter(., !is.na(sample))
-
-# Looking at results
-(qpcrCheck <- qpcrOutput[,c("Cq", "N0", "sample", "Sample_Use", "Quality_checks")] %>% arrange(., Cq)) 
-
-
-cfures1 <- calculateCFU(qpcrOutput, serial_dilution = serial_dilution, getModel = TRUE)
-cfures1  
 
