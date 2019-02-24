@@ -32,7 +32,7 @@ source("R_functions/cmm_gradient_functions.R")
 ###################################################################################################
 #### Importing data 
 
-prefdata <- read.xlsx("data/2016_data/pdr1_preference_data.xlsx", sheetName = "data")
+prefdata <- read.xlsx("data/2016_data/pdr1_preference_data.xlsx", sheet = "data")
 str(prefdata)
 
 # Separate leaf and symptom data from preference count data
@@ -73,6 +73,8 @@ modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
+## Save vcov and corr matrices list
+saveRDS(matrices, file = "output/cmm_parameter_correlation_matrices_2016.rds")
 
 #### Extract and organize parameter estimates from all models
 paramResults <- lapply(modelFits, mleTable)
@@ -94,8 +96,10 @@ paramData$se <- sqrt(paramData$variance)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
 
+dplyr::filter(paramData, week.trt == "3S")
+
 dplyr::filter(paramData, week.trt == "12S" | week.trt == "12R")
-testpardat <- dplyr::filter(paramData, week.trt == "12S")
+testpardat <- dplyr::filter(paramData, week.trt == "12R")
 testpardat
 
 
@@ -163,7 +167,7 @@ parameter_plot <-  with(plotPars,
                 # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
                 # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
 
-trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
+trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_rate_parameter_plot_test.tif")
   print(parameter_plot)
 dev.off()
 

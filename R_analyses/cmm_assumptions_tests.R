@@ -34,6 +34,10 @@ str(atdata)
 print.data.frame(atdata)
 
 
+#########################################################################################################################################
+#### Survival analysis for constant rate assumption
+#########################################################################################################################################
+
 #### Extract data for survival analysis
 ## Create an empty data.frame for the survival data
 nreps <- length(unique(atdata$rep)) # number of trials/replicates
@@ -66,7 +70,7 @@ survData <- survData %>% dplyr::filter(rep != 5)
 survData[survData$rep == 13,] <- c(13, 4, 1, "test_plant", 0, NA)
 survData[survData$rep == 15,] <- c(15, 6, 1, "test_plant", 0, NA)
 survData
-## Covert time and moved columns to numeric
+## Convert time and moved columns to numeric
 for(i in c(2,3,5,6)){
   survData[,i] <- as.numeric(survData[,i])
 }
@@ -110,10 +114,32 @@ survdat2$log.surv <- log(-log(survdat2$surv))
 
 
 #### Plot K-M survival estimates vs. time
-xyplot(log.surv ~ log.time|choice*rate, data = survdat2, 
-       scales = list(alternating = FALSE, tck = c(1, 0), cex = 1.1),
-       xlab = list("ln(time)", cex = 1.3),
-       ylab = list("ln{-ln[S(t)]}", cex = 1.3), aspect = 1,
-       layout = c(2,2), as.table = TRUE, strip = TRUE,
-       pch = 16, col = "black", type = c('p', 'r'))
+cmm_constant_rate_plot <- xyplot(log.surv ~ log.time|choice*rate, data = survdat2, 
+                                 scales = list(alternating = FALSE, tck = c(1, 0), cex = 1.1),
+                                 xlab = list("ln(time)", cex = 1.3),
+                                 ylab = list("ln{-ln[S(t)]}", cex = 1.3), aspect = 1,
+                                 layout = c(2,2), as.table = TRUE, strip = TRUE,
+                                 pch = 16, col = "black", type = c('p', 'r'))
 
+trellis.device(device = "tiff", file = "results/figures/2017_figures/cmm_assumptions_kaplan_meier_plots.tif")
+  print(cmm_constant_rate_plot)
+dev.off()
+
+
+###############################################################################
+#### Inspection of correlation matrices for consecutive choices assumption
+###############################################################################
+
+#### Too few movement events from the assumptions test for contingency table
+## Contingency table
+cchoiceData <- gs_read(pdr1DataURL, ws = "choice_contingency_table")
+str(cchoiceData)
+ctable <- with(cchoiceData, table(choice1, choice2))
+
+#### MLE correlation matrices from 2016
+corrMat16 <- readRDS("output/cmm_parameter_correlation_matrices_2016.rds")
+
+## Drop week 12.2 trials from output list
+corrTableList <- lapply(3:length(corrMat16), function(x) extractCorrelationMatrix(corrMat16[[x]]))
+names(corrTableList) <- names(corrMat16)[3:length(corrMat16)]
+write.xlsx(corrTableList, file = "results/cmm_assumptions_correlation_tables_2016.xlsx")

@@ -99,24 +99,19 @@ acqDataVector$week.cage <- factor(with(acqDataVector, paste(week, trt, rep, sep 
 acqDataVector$vectorcfu <- as.integer(acqDataVector$vectorcfu)
 str(acqDataVector)
 
+## Save acquisition data at the vector level for acquisition analysis
 saveRDS(acqDataVector, file = "output/pdr1_2016_vector_acquisition_dataset.rds")
 
-#### Constructing vector infection index
-# In each trial, I have Xf pops for each of the vectors. I could include in transmission model:
-# total Xf population among all vectors
-# proportion of vectors infected (b/c some cages have fewer than 8 vectors)
-# an evenness index of Xf pops among vectors
-# Matt's transmission parameters paper might have something to say about this
-# multiple possibilities can be evaluated using AIC
 
+#### Cage-level acquisition data
 ## Average duplicates for each sample
-acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu = mean(vectorcfu),
-                                                                        sdcfu = sd(vectorcfu),
-                                                                        logCagecfu = mean(log10(vectorcfu + 1)),
-                                                                        propVectorInfected = sum(vectorcfu > 0, na.rm = TRUE)/length(vectorcfu[!is.na(vectorcfu)]))
+acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu = mean(vectorcfu, na.rm = TRUE),
+                                                                        sdcfu = sd(vectorcfu, na.rm = TRUE),
+                                                                        logCagecfu = mean(log10(vectorcfu + 1), na.rm = TRUE),
+                                                                        propVectorInfectious = sum(vectorInfectious)/length(vectorInfectious[!is.na(vectorInfectious)]))
 print.data.frame(acqDataCage)
 
-## Merge with acquisition data at cage level with transmission-preference data set
+## Merge acquisition data at cage level with transmission-preference data set
 acqDataCage$week.cage <- with(acqDataCage, paste(week, trt, rep, sep=""))
 
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds")

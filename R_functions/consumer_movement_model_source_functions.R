@@ -283,6 +283,29 @@ getParCorrelations <- function(resultsList = resultsList){
 }
 
 
+#### Function to extract correlation matrix and make it a table with parameters identified
+extractCorrelationMatrix <- function(corrMatrixList){
+  # corrMatrixList should be the output of getParrCorrelations() function
+  # namely, this is a list containing elements:
+  # bestModelName = the best model variant, for which vcov and corr matrices are calculated
+  # corrMatrix = the correlation matrix from the best model variant, calculated from the variance-covariance matrix
+  correlationTable <- corrMatrixList$corMatrix %>% round(., digits = 3) %>% as.data.frame()
+  bestModelName <- as.character(corrMatrixList$bestModelName)
+  if(bestModelName == "choice") {
+    paramNames <- c("p1", "p2", "mu1", "mu2")
+    I} else {
+      if(bestModelName == "p.choice") {
+        paramNames <- c("p1", "p2", "mu")
+      } else {
+        if(bestModelName == "mu.choice") {
+          paramNames <- c("p", "mu1", "mu2")  
+        } else {
+          paramNames <- c("p", "mu")
+        }}}
+  names(correlationTable) <- paramNames
+  correlationTable <- cbind(paramNames, correlationTable)
+  return(correlationTable)
+}
 
 ##########################################################################################
 #### Function to extract parameter estimates and NLL values, 

@@ -266,6 +266,7 @@ summary(acqMod)
 
 # Analysis of infection status
 infectedMod <- glmer(vectorInfectious ~ week*trt + (1|week.cage), data = acqDataVector, family = "binomial")
+plot(simulateResiduals(infectedMod))
 summary(infectedMod)
 
 
