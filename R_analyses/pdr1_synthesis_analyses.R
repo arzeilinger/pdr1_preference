@@ -13,28 +13,9 @@ source("R_functions/factor2numeric.R")
 #### Combine preference, phenolic, and transmission data sets
 ##############################################################################################################
 
-## Read in preference rate estimates on per cage level
-# choice1 = source (Xylella infected) plant
-# choice2 = test plant
-paramDataCage <- readRDS("output/CMM_2017_rate_parameters_per_cage.rds")
+#### Load transmission, acquisition, culturing, preference data set
+transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
 
-## Strip cage identifier to multiple columns
-cage.strip <- tstrsplit(paramDataCage$cage, split = "-")
-paramDataCage$week <- cage.strip[[1]]
-paramDataCage$block <- cage.strip[[2]]
-paramDataCage$genotype <- cage.strip[[3]]
-paramDataCage$trt <- cage.strip[[4]]
-paramDataCage$rep <- cage.strip[[5]]
-# Add another "Rep" column, corresponding to "Rep" in phenolic dataset
-paramDataCage$Rep2 <- with(paramDataCage, ifelse(block == 1, rep, 
-                                                 ifelse(rep == 1, 5,
-                                                        ifelse(rep == 2, 6,
-                                                               ifelse(rep == 3, 7, 
-                                                                      ifelse(rep == 4, 8, NA)))))) %>% as.numeric()
-# Spread dataset so that each row is a cage; need to drop variances first
-paramDataCage2 <- paramDataCage %>% dplyr::select(-variance, -cage) %>% spread(parameter, estimate)
-paramDataCage2$week <- as.numeric(paramDataCage2$week)
-paramDataCage2$rep <- as.numeric(paramDataCage2$rep)
 
 ## Filter phenolic data set to only Treatment == "Both" as these correspond to the xf_plants or source plants in the trials
 phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
@@ -50,31 +31,8 @@ phenData$genotype <- with(phenData, ifelse(Res == "R", "094", "092"))
 phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
 
 
-#### Read in transmission dataset
-pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-                      visibility = "private")
-transdataGS <- gs_read(pdr1DataURL, ws = "test_plant_culturing")
-transdata <- transdataGS
-
-# Remove Control plant samples
-transdata <- transdata %>% dplyr::filter(!grepl("CTRL", genotype))
-
-# Combine test_plant_infection_1 and test_plant_infection_2 columns
-# In all cases, when I re-cultured a sample (test_plant_infection_2), the results were the same as the 1st time or more reliable
-# So go with test_plant_infection_2 results when they are available
-transdata$test_plant_infection <- with(transdata, ifelse(!is.na(test_plant_infection_2), test_plant_infection_2, test_plant_infection_1)) %>% as.integer()                                      
-
-# Fix column classes
-transdata$genotype <- factor(transdata$genotype)
-transdata$trt <- factor(transdata$trt)
-transdata$block <- factor(transdata$block)
-
-str(transdata)
-summary(transdata)
-
-
 #### Merge CMM preference parameter data set, phenolic data set, and transmission data set
-phenPrefTransData <- paramDataCage2 %>% left_join(., transdata, by = c("week" , "block", "genotype", "trt", "rep")) %>% 
+phenPrefTransData <- transVCPdata %>% 
   left_join(., phenData, by = c("week" = "Week", "genotype", "trt" = "Res", "Rep2" = "Rep")) %>% 
   arrange(week)
 str(phenPrefTransData)
