@@ -110,6 +110,13 @@ qpcrData %>% dplyr::filter(plateName == "2018-11-28_pdr1_2017.xlsx") %>% dplyr::
 check <- qpcrData %>% dplyr::filter(week == 14 & block == 1 & genotype == "102" & rep == 4)
 check
 
+
+#### Editing results of sample 901 "by hand"
+## Because of how I calculate the Cq mode for each sample, sample 901 gets a "0" for most frequent Cq, which is not correct
+## Also, sample 901 was the only recovered vector from cage 14-1-102R4, and the test plant was positive
+## So sample 901 should be "positive"
+vectorData[vectorData$sample == 901, "modeCq"] <- 40
+
 # Make a binary "infectious" variable for each bug
 # For now just take the max Cq value and if 0 < Cq < 40 then call the bug "infected"
 # Then calculate proportion of vectors infectious in each cage
@@ -156,27 +163,6 @@ str(transdata)
 summary(transdata)
 
 
-#### Join qPCR data and transmission data
-transVectorData <- transdata %>% dplyr::select(week, block, genotype, trt, rep, test_plant_infection) %>%
-  left_join(., vectorData3, by = c("genotype", "trt", "rep", "week", "block"))
-
-## Comparing transmission and acquisition data
-transVectorData %>% dplyr::filter(!is.na(propInfectious)) %>% arrange(week, block) %>% print.data.frame 
-transVectorData %>% arrange(week, block) %>% print.data.frame() # tail(n = 30) 
-
-# Note: Trial 8-2-094R4 has a positive plant and all 8 bugs were negative. Need to double check this
-# Also, 14-1-102R4 has a positive plant and 0 positive bugs, but only 1 bug tested.
-
-## Quick plot of proportion infectious over time
-qplot(x = week, y = propInfectious, data = transVectorData)
-
-## Calculate propInfected for test plants and mean propInfectious for vectors for each week-genotype combination
-transVectorSummary <- transVectorData %>% dplyr::filter(!is.na(propInfectious)) %>% 
-  group_by(week, genotype, trt) %>% summarise(propPlantInfected = sum(test_plant_infection)/length(test_plant_infection),
-                                              meanPropInfectious = mean(propInfectious, na.rm = TRUE),
-                                              nPropInfectious = length(propInfectious),
-                                              sePropInfectious = sd(propInfectious, na.rm = TRUE)/sqrt(nPropInfectious)) 
-transVectorSummary
 
 
 #### Plot time series of vector infections
