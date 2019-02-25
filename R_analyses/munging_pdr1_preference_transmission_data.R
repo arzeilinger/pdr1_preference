@@ -282,3 +282,42 @@ transVCData <- left_join(transVectorData, sourcedata2, by = c("week", "block", "
 
 with(transVectorData, table(week, genotype))
 str(transVCData)
+
+
+#######################################################################################################################
+#### Join preference data to transmission/acquisition/culturing data
+
+#### Read in preference rate estimates on per cage level
+## choice1 = source (Xylella infected) plant
+## choice2 = test plant
+paramDataCage <- readRDS("output/CMM_2017_rate_parameters_per_cage.rds")
+
+## Strip cage identifier to multiple columns
+cage.strip <- tstrsplit(paramDataCage$cage, split = "-")
+paramDataCage$week <- cage.strip[[1]]
+paramDataCage$block <- factor(cage.strip[[2]])
+paramDataCage$genotype <- cage.strip[[3]]
+paramDataCage$trt <- factor(cage.strip[[4]])
+paramDataCage$rep <- cage.strip[[5]]
+## Add another "Rep" column, corresponding to "Rep" in phenolic dataset
+paramDataCage$Rep2 <- with(paramDataCage, ifelse(block == 1, rep, 
+                                                 ifelse(rep == 1, 5,
+                                                        ifelse(rep == 2, 6,
+                                                               ifelse(rep == 3, 7, 
+                                                                      ifelse(rep == 4, 8, NA)))))) %>% as.numeric()
+## Spread dataset so that each row is a cage; need to drop variances first
+paramDataCage2 <- paramDataCage %>% dplyr::select(-variance, -cage) %>% spread(parameter, estimate)
+paramDataCage2$week <- as.numeric(paramDataCage2$week)
+paramDataCage2$rep <- as.numeric(paramDataCage2$rep)
+
+str(paramDataCage2)
+with(paramDataCage2, table(week, genotype))
+## All trials are accounted for
+
+#### Join with transmission/acquisition/culturing data set
+transVCPdata <- left_join(transVCData, paramDataCage2, by = c("week", "block", "genotype", "trt", "rep"))
+transVCPdata$genotype <- factor(transVCPdata$genotype)
+str(transVCPdata)
+summary(transVCPdata)
+
+saveRDS(transVCPdata, file = "output/complete_2017_transmission-preference_dataset.rds")
