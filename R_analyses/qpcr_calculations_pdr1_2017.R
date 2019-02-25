@@ -63,14 +63,9 @@ outputList[[1]][outputList[[1]]$sample == " 9", "sample"] <- 9
 outputList[[8]][outputList[[8]]$sample == " 92", "sample"] <- 92
 outputList[[8]][outputList[[8]]$sample == " 96", "sample"] <- 96
 
-# # Calculate CFUs for each plate using the standard curves
-# cfuList <- lapply(outputList, function(x) calculateCFU(qpcrdata = x, serial_dilution = serial_dilution, getModel = TRUE))
-# # get the standard curve regression models out
-# sModels <- lapply(1:length(cfuList), function(x) cfuList[[x]][[2]] %>% summary())
-# # extract CFU data and make into a single data.frame
-# vectorcfu <- lapply(1:length(cfuList), function(x) cfuList[[x]][[3]]) %>% rbindlist() %>% as.data.frame() 
-# vectorcfu %>% dplyr::select(sample, cfu) %>% tail()
-
+#### Filter out 2016 samples from the last plate: 2019-02-07
+## The 2017 samples have tube code numbers > 800; the 2016 numbers are < 300
+outputList[[29]] <- outputList[[29]] %>% mutate(sample = as.numeric(sample)) %>% dplyr::filter(sample > 800)
 
 #### Import codes for experimental treatments, and merge with tube codes
 tubeCodes <- read.xlsx(paste(qpcrDir, "extraction_tube_codes_pdr1_2017.xlsx", sep = ""))
@@ -108,7 +103,7 @@ vectorData <- qpcrData %>% group_by(sample) %>% summarise(minCq = min(Cq, na.rm 
 vectorData %>% dplyr::filter(maxDiff > 5) %>% mutate("sample" = as.numeric(sample)) %>%
   dplyr::filter(!is.na(sample)) %>% arrange(plateName) %>% tail(n = 20) #%>% print.data.frame()
 
-qpcrData %>% dplyr::filter(sample == 878)
+qpcrData %>% dplyr::filter(sample == 901)
 
 qpcrData %>% dplyr::filter(plateName == "2018-11-28_pdr1_2017.xlsx") %>% dplyr::select(well, sample, Cq, N0, Sample_Use, Quality_checks) %>% arrange(sample)
 

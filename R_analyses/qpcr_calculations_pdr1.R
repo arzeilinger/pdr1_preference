@@ -134,7 +134,7 @@ qpcrOutput$Cq[qpcrOutput$Cq >= 41] <- 0
 # I think Sanjeet switched 2PC (+ control) with NTC (- control) samples
 
 #### Merge these re-run samples with the final 2016 data set
-#### FINAL DATA SET
+#### RELOAD FINAL DATA SET
 vectorData <- readRDS("output/pdr1_2016_vector_cfu_from_qpcr.rds")
 
 ## filter to just 2016 vectors; use the fact that the 2017 samples are the largest numbers
