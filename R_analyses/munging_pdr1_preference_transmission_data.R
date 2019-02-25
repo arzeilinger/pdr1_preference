@@ -186,7 +186,7 @@ transVectorData %>% arrange(week, block) %>% tail(n = 30) %>% print.data.frame()
 # Also, 14-1-102R4 has a positive plant and 0 positive bugs, but only 1 bug tested.
 
 saveRDS(transVectorData, file = "output/pdr1_transmission_preference_dataset_2017.rds")
-
+str(transVectorData)
 
 ## Quick plot of proportion infectious over time
 qplot(x = week, y = propInfectious, data = transVectorData)
@@ -321,3 +321,33 @@ str(transVCPdata)
 summary(transVCPdata)
 
 saveRDS(transVCPdata, file = "output/complete_2017_transmission-preference_dataset.rds")
+
+
+
+#######################################################################################################################
+#### Join phenolic/chemistry data to transmission/acquisition/culturing/preference data
+
+
+## Filter phenolic data set to only Treatment == "Both" as these correspond to the xf_plants or source plants in the trials
+phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
+phenData <- phenData %>% dplyr::filter(Treatment == "Both")
+phenData$Rep <- as.numeric(phenData$Rep)
+# Make "Res" groups capitalized
+phenData$Res <- with(phenData, ifelse(Res == "r", "R", "S"))
+# Add a genotype column for merging with other data sets
+phenData$genotype <- with(phenData, ifelse(Res == "R", "094", "092"))
+
+
+#### Read in phenolic dataset
+phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
+
+
+#### Merge CMM preference parameter data set, phenolic data set, and transmission data set
+phenPrefTransData <- transVCPdata %>% 
+  left_join(., phenData, by = c("week" = "Week", "genotype", "trt" = "Res", "Rep2" = "Rep")) %>% 
+  arrange(week)
+str(phenPrefTransData)
+summary(phenPrefTransData)
+
+# Save final data set
+saveRDS(phenPrefTransData, file = "output/full_phenolics_preference_transmission_dataset.rds")

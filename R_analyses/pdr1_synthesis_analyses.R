@@ -2,50 +2,79 @@
 
 rm(list = ls())
 # Load packages
-my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2",
-                 "bbmle", "glmmLasso", "lmmen")
+my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
+                 "bbmle", "glmmLasso", "lmmen", "glmnetUtils")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
 
 
-##############################################################################################################
-#### Combine preference, phenolic, and transmission data sets
-##############################################################################################################
-
-#### Load transmission, acquisition, culturing, preference data set
+#### Load transmission, acquisition, culturing, preference (and phenolic, when it's ready) data set
 transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
+str(transVCPdata)
+summary(transVCPdata)
+
+#### For CMM parameters
+## choice1 = source (Xylella infected) plant
+## choice2 = test plant
 
 
-## Filter phenolic data set to only Treatment == "Both" as these correspond to the xf_plants or source plants in the trials
-phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
-phenData <- phenData %>% dplyr::filter(Treatment == "Both")
-phenData$Rep <- as.numeric(phenData$Rep)
-# Make "Res" groups capitalized
-phenData$Res <- with(phenData, ifelse(Res == "r", "R", "S"))
-# Add a genotype column for merging with other data sets
-phenData$genotype <- with(phenData, ifelse(Res == "R", "094", "092"))
+######################################################################################################
+#### Combined transmission analysis 2017
+######################################################################################################
+FullModel <- glm(test_plant_infection ~ week*genotype + PD_symptoms_index + propInfectious + log10(xfpop+1) + mu1 + mu2 + p1 + p2,
+                 data = transVCPdata, family = "binomial")
+plot(simulateResiduals(FullModel))
+summary(FullModel)
 
-
-#### Read in phenolic dataset
-phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
-
-
-#### Merge CMM preference parameter data set, phenolic data set, and transmission data set
-phenPrefTransData <- transVCPdata %>% 
-  left_join(., phenData, by = c("week" = "Week", "genotype", "trt" = "Res", "Rep2" = "Rep")) %>% 
-  arrange(week)
-str(phenPrefTransData)
-summary(phenPrefTransData)
-
-# Save final data set
-saveRDS(phenPrefTransData, file = "output/full_phenolics_preference_transmission_dataset.rds")
+#### Look at relationships among variables
+transVCPdata %>% dplyr::select(-week, -block, -genotype, -trt, -rep, -nbugs, -totalInfectious, -plantID, -Rep2) %>% pairs()
 
 
 
-#####################################################################################################
+#### Transmission analysis using elastic net 
+## Define lambda values
+lambdas <- 2^seq(-1, -8, length = 20)
+#### Using the glmnetUtils package
+enetTransdata <- transVCPdata %>% mutate(log.xfpop = log10(xfpop+1)) %>%
+                                         #test_plant_infection = factor(ifelse(test_plant_infection == 1, "infected", "non_infected"))) %>%
+  dplyr::select(test_plant_infection, week, genotype, PD_symptoms_index, propInfectious, log.xfpop, mu1, mu2, p1, p2) %>%
+  dplyr::filter(complete.cases(.))
+str(enetTransdata)
+
+## Set up genotype factor levels
+glev <- list(genotype = levels(enetTransdata$genotype))
+
+#### Cross-validation of alpha and lambda
+enetTransCV <- cva.glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
+                          nfolds = 5, lambda = lambdas, xlev = glev)
+enetTransCV
+#plot(enetTransCV)
+minlossplot(enetTransCV)
+## best alpha results are all over the place
+## need to check with caret package is using elastic net
+# ## Plot just the cv.glmnet output for alpha = 0, which is the first in the list of cv.glmnet objects
+# plot(enetTransCV$modlist[[1]])
+# enetTransCV$modlist[[1]]
+# bestLambda <- enetTransCV$modlist[[1]]$lambda.min
+# ridgeTrans <- glmnetUtils::glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial", alpha = 0)
+# enetResults1 <- coef(ridgeTrans, s = bestLambda)
+
+
+#### Transmission analysis using LASSO
+## Define lambda values
+lambdas <- 2^seq(-1, -8, length = 20)
+
+lassoTransCV <- cv.glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
+                          alpha = 1, nfolds = 5, lambda = lambdas, xlev = glev)
+plot(lassoTransCV)
+str(lassoTransCV)
+
+coef(lassoTransCV, s = lassoTransCV$lambda.min)
+
 #####################################################################################################
 #### GLMM LASSO analysis of per-cage preference and phenolics
+#####################################################################################################
 
 #### Cleaning dataset for glmmLASSO
 phenPrefTransData <- readRDS("output/full_phenolics_preference_transmission_dataset.rds")
@@ -201,8 +230,6 @@ ggsave("results/figures/2017_figures/leaving_phenolics_lasso_plot_2017.jpg", plo
        width = 7, height = 7, units = "in")
 
 
-######################################################################################################
-#### Combined transmission analysis
 
 
 
