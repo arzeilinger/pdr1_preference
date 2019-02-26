@@ -3,7 +3,8 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
-                 "bbmle", "glmmLasso", "lmmen", "glmnetUtils")
+                 "bbmle", "glmmLasso", "lmmen", "glmnetUtils", "caret",
+                 "modeest")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -36,10 +37,13 @@ transVCPdata %>% dplyr::select(-week, -block, -genotype, -trt, -rep, -nbugs, -to
 ## Define lambda values
 lambdas <- 2^seq(-1, -8, length = 20)
 #### Using the glmnetUtils package
-enetTransdata <- transVCPdata %>% mutate(log.xfpop = log10(xfpop+1)) %>%
-                                         #test_plant_infection = factor(ifelse(test_plant_infection == 1, "infected", "non_infected"))) %>%
-  dplyr::select(test_plant_infection, week, genotype, PD_symptoms_index, propInfectious, log.xfpop, mu1, mu2, p1, p2) %>%
+enetTransdata <- transVCPdata %>% mutate(log.xfpop = log10(xfpop+1),
+                                         trtNumeric = as.numeric(trt) - 1,
+                                         test_plant_infection = factor(ifelse(test_plant_infection == 1, "infected", "non_infected"))) %>%
+  dplyr::select(test_plant_infection, trtNumeric, PD_symptoms_index, propInfectious, log.xfpop, mu1, mu2, p1, p2) %>%
   dplyr::filter(complete.cases(.))
+# Switch factor level order to get correct sign on coefficient estimates
+enetTransdata$test_plant_infection <- factor(enetTransdata$test_plant_infection, levels(enetTransdata$test_plant_infection)[c(2,1)])
 str(enetTransdata)
 
 ## Set up genotype factor levels
@@ -68,9 +72,85 @@ lambdas <- 2^seq(-1, -8, length = 20)
 lassoTransCV <- cv.glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
                           alpha = 1, nfolds = 5, lambda = lambdas, xlev = glev)
 plot(lassoTransCV)
-str(lassoTransCV)
-
 coef(lassoTransCV, s = lassoTransCV$lambda.min)
+
+
+#### Transmission analysis using elastic net and the caret package
+## Glmnet wants the data to be matrices, not data frames.
+x_train <- enetTransdata %>% dplyr::select(-test_plant_infection) %>% as.matrix()
+## For caret, the y variable must be a factor
+## and I need to re-order so that "non-infected" is first, to get the coefficient signs correct
+y_train <- enetTransdata[,"test_plant_infection"] %>% as.matrix() %>% factor()
+y_train <- factor(y_train, levels(y_train)[c(2,1)])
+
+## Set up trainControl
+train_control = trainControl(method = "cv",
+                             number = 5, returnResamp = "all",
+                             classProbs = TRUE, summaryFunction = twoClassSummary,
+                             savePredictions = "final")
+## Create a custom tuning grid.
+enet_grid = expand.grid(alpha = seq(0, 1, by = 0.1),
+                        lambda = lambdas) # doing an exponential scale allows to explore more space of lambda values
+enet = train(x_train, y_train, method = "glmnet",
+             metric = "ROC",
+             preProcess = c("center", "scale"),
+             tuneGrid = enet_grid,
+             trControl = train_control)
+print(enet)
+plot(enet)
+enet$bestTune
+(enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
+
+enet3 <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
+                             alpha = enet$bestTune$alpha, lambda = lambdas)
+(enetResults3 <- coef(enet3, s = enet$bestTune$lambda))
+
+
+#### The cva.glmnet and caret results largely match up
+#### Results are highly variable across CV runs. Need to run CV multiple times and average coefficient results
+## Run caret::train() through for loop
+
+## Number of runs
+nrun <- 100
+
+## Empty vectors for coefficients and best tune parameters
+enetResultsList <- enetBestTuneList <- vector("list", nrun)
+
+for(i in 1:nrun){
+  enetTrain = train(x_train, y_train, method = "glmnet",
+                    metric = "ROC",
+                    preProcess = c("center", "scale"),
+                    tuneGrid = enet_grid,
+                    trControl = train_control)
+  enetBestTuneList[[i]] <- enetTrain$bestTune
+  enet <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
+                              alpha = enetTrain$bestTune$alpha, lambda = lambdas)
+  enetResultsList[[i]] <- as.data.frame(t(as.matrix(coef(enet, s = enetTrain$bestTune$lambda))))
+}
+
+## Combine and summarize best tuning parameters
+enetBestTune <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
+hist(enetBestTune$alpha)
+hist(enetBestTune$lambda)
+## Get mode of alpha and lambda
+modeTune <- apply(enetBestTune, 2, mfv)
+
+#### Combine runs and summarize coefficient estimates
+enetResultsData <- enetResultsList %>% rbindlist() %>% as.data.frame()
+enetSummary <- data.frame(meancoef = apply(enetResultsData, 2, mean),
+                          mediancoef = apply(enetResultsData, 2, median),
+                          sdcoef = apply(enetResultsData, 2, sd))
+
+
+
+
+
+
+
+saveRDS(enetResultsList, file = "output/elastic_net_multi_cv_coefficients.rds")
+
+
+
 
 #####################################################################################################
 #### GLMM LASSO analysis of per-cage preference and phenolics
