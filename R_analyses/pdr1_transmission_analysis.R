@@ -355,7 +355,8 @@ ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfect
 #### 2017 data
 ##############################################################################################################
 
-transdata17 <- readRDS("output/pdr1_transmission_preference_dataset_2017.rds")
+transdata17 <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
+with(transdata17, table(week, genotype))
 
 #### Analysis of PD symptoms using ANCOVA
 # pdMod1 includes week:genotype interaction, which tests for different slopes and intercepts
@@ -413,9 +414,9 @@ ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
 #### Analysis of transmission data with binomial GLM
 
 # How many trials have positive test plant and positive pre-screen plant?
-transdata %>% dplyr::filter((grepl("PS plant positive", notes) & test_plant_infection == 1))
+transdata17 %>% dplyr::filter((grepl("PS plant positive", notes) & test_plant_infection == 1))
 # Remove trials where test plant is positive and pre-screen plant is positive
-transdata2 <- transdata %>% dplyr::filter(!(grepl("PS plant positive", notes) & test_plant_infection == 1))
+transdata2 <- transdata17 %>% dplyr::filter(!(grepl("PS plant positive", notes) & test_plant_infection == 1))
 
 transMod1 <- glm(test_plant_infection ~ block + week*genotype, family = "binomial", data = transdata2)
 summary(transMod1)

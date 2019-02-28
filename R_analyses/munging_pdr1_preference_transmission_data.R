@@ -175,7 +175,7 @@ summary(transdata17)
 ## Calling object vectorData3 to keep with namings from "qpcr_calculations_pdr1_2017.R" script
 vectorData3 <- readRDS("output/vector_acquisition_data_pdr1_2017.rds")
 
-transVectorData <- transdata17 %>% dplyr::select(week, block, genotype, trt, rep, PD_symptoms_index, test_plant_infection) %>%
+transVectorData <- transdata17 %>% dplyr::select(week, block, genotype, trt, rep, PD_symptoms_index, test_plant_infection, notes) %>%
   left_join(., vectorData3, by = c("genotype", "trt", "rep", "week", "block"))
 
 ## Comparing transmission and acquisition data

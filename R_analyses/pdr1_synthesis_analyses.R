@@ -4,7 +4,7 @@ rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
                  "bbmle", "glmmLasso", "lmmen", "glmnetUtils", "caret",
-                 "modeest")
+                 "modeest", )
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -32,6 +32,8 @@ summary(FullModel)
 transVCPdata %>% dplyr::select(-week, -block, -genotype, -trt, -rep, -nbugs, -totalInfectious, -plantID, -Rep2) %>% pairs()
 
 
+#### Remove mu2 outlier
+transVCPdata <- transVCPdata %>% dplyr::filter(mu2 < max(mu2))
 
 #### Transmission analysis using elastic net 
 ## Define lambda values
@@ -141,13 +143,94 @@ enetSummary <- data.frame(meancoef = apply(enetResultsData, 2, mean),
                           mediancoef = apply(enetResultsData, 2, median),
                           sdcoef = apply(enetResultsData, 2, sd))
 
+saveRDS(list(modeTune, enetSummary), file = "results/multi-run_CV_elastic_net_transmission_results_2017.rds")
 
 
+#### Plot Elastic Net results
+## Vector of clear names for covariates
+enetSummary$niceNames <- c("Intercept", "Resistant/Susceptible cultivars", "PD disese severity", 
+               "Prop. infectious vectors", "Xylella population size in infected plant", 
+               "Leaving rate from infected plant", "Leaving rate from test plant",
+               "Attraction rate from infected plant", "Attraction rate from test plant")
+enetSummary$niceNames <- factor(enetSummary$niceNames, levels = enetSummary$niceNames[order(enetSummary$meancoef, decreasing = FALSE)])
 
 
+trans17enetPlot <- ggplot(enetSummary, aes(y = niceNames, x = meancoef)) +
+  geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
+  geom_point(size = 3) +
+  geom_vline(linetype = "longdash", xintercept = 0) +
+  xlab("Coefficient estimate") + ylab("Covariate") + 
+  theme_bw() + 
+  theme(axis.line = element_line(colour = "black"),
+        text = element_text(size = 20),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+trans17enetPlot
+
+ggsave(filename = "results/figures/2017_figures/transmission_2017_elastic_net_coefficients_plot.tiff", 
+       plot = trans17enetPlot,
+       width = 7, height = 7, units = "in")
 
 
-saveRDS(enetResultsList, file = "output/elastic_net_multi_cv_coefficients.rds")
+#### Plotting transmission vs. acquisition
+transAcq17plot <- ggplot(transVCPdata, aes(y = jitter(test_plant_infection, amount = 0.07), x = propInfectious)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black") +
+  scale_x_continuous(name = "Proportion of vectors infectious",
+                     limits = c(0,1),
+                     breaks = seq(0,1,0.25)) +
+  scale_y_continuous(name = "Probability of transmission",
+                     limits = c(-0.1,1.1),
+                     breaks = seq(0,1,0.25)) +
+  theme_bw() + 
+  theme(axis.line = element_line(colour = "black"),
+        text = element_text(size = 14),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+transAcq17plot
+ggsave(filename = "results/figures/2017_figures/transmission_acquisition_2017_scatter_plot.tiff", 
+       plot = transAcq17plot,
+       width = 7, height = 7, units = "in")
+
+
+#### Transmission vs. mu2 plot
+transleave17plot <- ggplot(transVCPdata, aes(y = jitter(test_plant_infection, amount = 0.07), x = mu2)) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black") +
+  xlab("Leaving rate from test plant") + 
+  # scale_x_continuous(name = "Leaving rate from test plant",
+  #                    limits = c(0,1),
+  #                    breaks = seq(0,1,0.25)) +
+  scale_y_continuous(name = "Probability of transmission",
+                     limits = c(-0.1,1.1),
+                     breaks = seq(0,1,0.25)) +
+  theme_bw() + 
+  theme(axis.line = element_line(colour = "black"),
+        text = element_text(size = 14),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+transleave17plot
+ggsave(filename = "results/figures/2017_figures/transmission_mu2_2017_scatter_plot.tiff", 
+       plot = transleave17plot,
+       width = 7, height = 7, units = "in")
+
+
+#####################################################################################################
+#### GAM model
+#####################################################################################################
+
+trans17gam <- gam(test_plant_infection ~ s(propInfectious) + s(log10(xfpop+1)) + s(mu1) + s(mu2) + s(p1) + s(p2), data = transVCPdata, family = "binomial")
+summary(trans17gam)
+plot(trans17gam)
 
 
 
