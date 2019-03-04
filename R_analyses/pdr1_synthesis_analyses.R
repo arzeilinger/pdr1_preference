@@ -3,12 +3,176 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
-                 "bbmle", "glmmLasso", "lmmen", "glmnetUtils", "caret",
+                 "bbmle", "glmnetUtils", "caret",
                  "modeest")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
 
+
+
+#############################################################################################################
+#############################################################################################################
+#### 2016 Combined analysis of transmission data
+#############################################################################################################
+
+#### Load combined and filtered transmission/preference data set
+# Remove second 12-week set of trials
+transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
+transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
+transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
+transdata$trt <- factor(transdata$trt)
+str(transdata)
+
+
+#### Full linear model
+FullModel <- glm(test.plant.infection ~ week*trt + propVectorInfected + source.cfu.per.g + p1 + p2 + mu1 + mu2 + pd_index, data = transdata, family = "binomial")
+simResFullModel <- simulateResiduals(FullModel, n = 1000)
+plot(simResFullModel)
+diagnosticsFullModel <- testResiduals(simResFullModel)
+## Model diagnostics suggest a good model
+summary(FullModel)
+
+#### Look at relationships among variables
+transdata %>% dplyr::select(test.plant.infection, propVectorInfected, source.cfu.per.g, pd_index, p1, p2, mu1, mu2) %>% pairs()
+
+#### Transmission analysis using elastic net 
+## Define lambda values
+lambdas <- 2^seq(-1, -8, length = 20)
+#### Using the glmnetUtils package
+enetTransdata <- transdata %>% mutate(log.source.cfu = log10(source.cfu.per.g+1),
+                                      trtNumeric = as.numeric(trt) - 1,
+                                      test.plant.infection = factor(ifelse(test.plant.infection == 1, "infected", "non_infected"))) %>%
+  dplyr::select(test.plant.infection, trtNumeric, propVectorInfected, log.source.cfu, pd_index, mu1, mu2, p1, p2) %>%
+  dplyr::filter(complete.cases(.))
+str(enetTransdata)
+
+
+
+
+
+#### Transmission analysis using elastic net 
+## Define lambda values
+lambdas <- 2^seq(0, -8, length = 20)
+
+#### Cross-validation of alpha and lambda
+enetTransCV <- cva.glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial",
+                          nfolds = 5, lambda = lambdas)
+enetTransCV
+#plot(enetTransCV)
+minlossplot(enetTransCV)
+## best alpha results are all over the place
+## need to check with caret package is using elastic net
+# ## Plot just the cv.glmnet output for alpha = 0, which is the first in the list of cv.glmnet objects
+# plot(enetTransCV$modlist[[1]])
+# enetTransCV$modlist[[1]]
+# bestLambda <- enetTransCV$modlist[[1]]$lambda.min
+# ridgeTrans <- glmnetUtils::glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial", alpha = 0)
+# enetResults1 <- coef(ridgeTrans, s = bestLambda)
+
+
+#### Transmission analysis using LASSO
+lassoTransCV <- cv.glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial",
+                          alpha = 1, nfolds = 5, lambda = lambdas)
+plot(lassoTransCV)
+coef(lassoTransCV, s = lassoTransCV$lambda.min)
+
+
+#### Transmission analysis using elastic net and the caret package
+## Glmnet wants the data to be matrices, not data frames.
+x_train <- enetTransdata %>% dplyr::select(-test.plant.infection) %>% as.matrix()
+## For caret, the y variable must be a factor
+## and I need to re-order so that "non-infected" is first, to get the coefficient signs correct
+y_train <- enetTransdata[,"test.plant.infection"] %>% as.matrix() %>% factor()
+y_train <- factor(y_train, levels(y_train)[c(2,1)])
+
+## Set up trainControl
+train_control = trainControl(method = "cv",
+                             number = 5, 
+                             #selectionFunction = "oneSE",
+                             returnResamp = "all",
+                             classProbs = TRUE, 
+                             summaryFunction = twoClassSummary,
+                             savePredictions = "final")
+
+#### Create a custom tuning grid.
+## Find max lambda for cross validation
+## Formula found here: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+## Need to center and scale predictors first
+xenet <- enetTransdata %>% dplyr::select(-test.plant.infection) %>% scale(., center = TRUE, scale = TRUE)
+yenet <- ifelse(enetTransdata$test.plant.infection == "infected", 1, 0)
+lambdaMax <- apply(xenet, 2, function(x) sum(yenet*x)) %>% max()
+## set upper limit for lamba range based on lambdaMax and alpha
+## from this website: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+alphas = seq(0, 1, by = 0.1)
+lambdaMaxAdj <- 1/(1-alphas)*lambdaMax
+lambdaMaxAdj[lambdaMaxAdj == Inf] <- max(lambdaMaxAdj[lambdaMaxAdj != Inf])
+enetTuneList <- vector("list", length(alphas))
+for(i in 1:length(alphas)){
+  enetTuneList[[i]] <- expand.grid(alpha = alphas[i], 
+                                   lambda = seq(0, lambdaMaxAdj[i], length.out = 20))
+}
+enet_grid <- enetTuneList %>% rbindlist() %>% as.data.frame()
+
+#### Run cross-validation once
+enet = train(x_train, y_train, method = "glmnet",
+             metric = "ROC",
+             preProcess = c("center", "scale"),
+             tuneGrid = enet_grid,
+             trControl = train_control)
+print(enet)
+plot(enet)
+enet$bestTune
+(enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
+
+enet3 <- glmnetUtils::glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial",
+                             alpha = enet$bestTune$alpha, lambda = lambdas)
+(enetResults3 <- coef(enet3, s = enet$bestTune$lambda))
+#### The cva.glmnet and caret results largely match up
+## Results are highly variable across CV runs. Need to run CV multiple times and average coefficient results
+
+#### Run caret::train() through for loop
+## Could do this with "repeatedcv" method in trainControl, but don't know how to extract variance estimate from repeats
+## Run it in a for loop instead
+
+## Number of runs
+nrun <- 100
+
+## Empty vectors for coefficients and best tune parameters
+enetResultsList <- enetBestTuneList <- vector("list", nrun)
+
+for(i in 1:nrun){
+  enetTrain = train(x_train, y_train, method = "glmnet",
+                    metric = "ROC",
+                    preProcess = c("center", "scale"),
+                    tuneGrid = enet_grid,
+                    trControl = train_control)
+  enetBestTuneList[[i]] <- enetTrain$bestTune
+  enet <- glmnetUtils::glmnet(test.plant.infection ~ ., data = enetTransdata, family = "binomial",
+                              alpha = enetTrain$bestTune$alpha, lambda = lambdas)
+  enetResultsList[[i]] <- as.data.frame(t(as.matrix(coef(enet, s = enetTrain$bestTune$lambda))))
+}
+
+## Combine and summarize best tuning parameters
+enetBestTune <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
+hist(enetBestTune$alpha)
+hist(enetBestTune$lambda)
+## Get mode of alpha and lambda
+modeTune <- apply(enetBestTune, 2, mfv)
+
+#### Combine runs and summarize coefficient estimates
+enetResultsData <- enetResultsList %>% rbindlist() %>% as.data.frame()
+enetSummary <- data.frame(meancoef = apply(enetResultsData, 2, mean),
+                          mediancoef = apply(enetResultsData, 2, median),
+                          sdcoef = apply(enetResultsData, 2, sd))
+
+saveRDS(list(modeTune, enetSummary), file = "results/multi-run_CV_elastic_net_transmission_results_2016.rds")
+
+
+######################################################################################################
+######################################################################################################
+#### 2017 Combined transmission analysis
+######################################################################################################
 
 #### Load transmission, acquisition, culturing, preference (and phenolic, when it's ready) data set
 transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
@@ -19,10 +183,10 @@ summary(transVCPdata)
 ## choice1 = source (Xylella infected) plant
 ## choice2 = test plant
 
+#### Remove mu2 outlier
+transVCPdata <- transVCPdata %>% dplyr::filter(mu2 < max(mu2))
 
-######################################################################################################
-#### Combined transmission analysis 2017
-######################################################################################################
+#### Full linear model
 FullModel <- glm(test_plant_infection ~ week*genotype + PD_symptoms_index + propInfectious + log10(xfpop+1) + mu1 + mu2 + p1 + p2,
                  data = transVCPdata, family = "binomial")
 plot(simulateResiduals(FullModel))
@@ -32,12 +196,11 @@ summary(FullModel)
 transVCPdata %>% dplyr::select(-week, -block, -genotype, -trt, -rep, -nbugs, -totalInfectious, -plantID, -Rep2) %>% pairs()
 
 
-#### Remove mu2 outlier
-transVCPdata <- transVCPdata %>% dplyr::filter(mu2 < max(mu2))
-
+######################################################################################################
 #### Transmission analysis using elastic net 
 ## Define lambda values
 lambdas <- 2^seq(-1, -8, length = 20)
+
 #### Using the glmnetUtils package
 enetTransdata <- transVCPdata %>% mutate(log.xfpop = log10(xfpop+1),
                                          trtNumeric = as.numeric(trt) - 1,
