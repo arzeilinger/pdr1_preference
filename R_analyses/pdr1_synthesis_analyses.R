@@ -4,7 +4,7 @@ rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
                  "bbmle", "glmmLasso", "lmmen", "glmnetUtils", "caret",
-                 "modeest", )
+                 "modeest")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -172,7 +172,7 @@ trans17enetPlot
 
 ggsave(filename = "results/figures/2017_figures/transmission_2017_elastic_net_coefficients_plot.tiff", 
        plot = trans17enetPlot,
-       width = 7, height = 7, units = "in")
+       width = 12, height = 7, units = "in")
 
 
 #### Plotting transmission vs. acquisition
@@ -187,7 +187,7 @@ transAcq17plot <- ggplot(transVCPdata, aes(y = jitter(test_plant_infection, amou
                      breaks = seq(0,1,0.25)) +
   theme_bw() + 
   theme(axis.line = element_line(colour = "black"),
-        text = element_text(size = 14),
+        text = element_text(size = 20),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
@@ -212,7 +212,7 @@ transleave17plot <- ggplot(transVCPdata, aes(y = jitter(test_plant_infection, am
                      breaks = seq(0,1,0.25)) +
   theme_bw() + 
   theme(axis.line = element_line(colour = "black"),
-        text = element_text(size = 14),
+        text = element_text(size = 20),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
