@@ -395,6 +395,18 @@ modelFits <- readRDS("output/CMM_optimx_model_selection_output_2017.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
+names(matrices) <- levels(cmmData$week.genotype)
+## Some errors occurred calculating correlation matrices, look into them
+mat14 <- matrices[[14]]
+op14 <- modelFits[[14]]
+op14fixed <- op14$op.list$fixed
+hess14 <- hessian(func = NLLlist$fixed, x = as.numeric(op14fixed[,grep("p",names(op14fixed))]))
+vcov14 <- hess14 %>% solve()
+# Calculate correlation matrix; should have 1's along diagonal
+cor14 <- vcov14 %>% cov2cor()
+
+## Save vcov and corr matrices list
+saveRDS(matrices, file = "output/cmm_parameter_correlation_matrices_2017.rds")
 
 #### Extract and organize parameter estimates from all models
 paramResults <- lapply(modelFits, mleTable)

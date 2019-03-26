@@ -22,15 +22,8 @@ transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
 transdata$trt <- factor(transdata$trt)
 str(transdata)
 
+######################################################################################################################
 #### Analysis of PD symptom data
-# sympMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "poisson")
-# sympTrtMod <- glm(pd_index ~ week*trt, data = transdata, family = "poisson")
-# sympNoInterxnMod <- glm(pd_index ~ week + trt, data = transdata, family = "poisson")
-# AICctab(sympMod, sympTrtMod, sympNoInterxnMod, base = TRUE, delta = TRUE)
-# # sympTrtMod (with interaction) is best and quasipoisson distribution is best, AIC won't work with quasipoisson
-# sympTrtMod <- glm(pd_index ~ week*trt*log10(source.cfu.per.g+1), data = transdata, family = "quasipoisson")
-# plot(sympTrtMod)
-# summary(sympTrtMod)
 # # Linear model with transformed symptom data
 # boxcox(pd_index+1 ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
 # sympLM <- lm(log(pd_index+1) ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
@@ -271,26 +264,33 @@ ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfect
        width = 7, height = 7, units = "in")
 
 
+##############################################################################################################
+#### Non-linear models of transmission
+
+
 
 ##############################################################################################################
 ##############################################################################################################
 #### 2017 data
 ##############################################################################################################
 
-transdata17 <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
-with(transdata17, table(week, genotype))
+transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
+str(transVCPdata)
+with(transVCPdata, table(week, genotype))
 
+
+##############################################################################################################
 #### Analysis of PD symptoms using ANCOVA
 # pdMod1 includes week:genotype interaction, which tests for different slopes and intercepts
-boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transdata17, lambda = seq(-2, 2, by=0.5))
+boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
 # Best transmformation is inverse sqrt; residuals don't look great, but better that with a quasipoisson GLM
-pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transdata17)
+pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transVCPdata)
 plot(pdMod1)
 anova(pdMod1)
 summary(pdMod1)
 ## Analysis of PD symptoms using Partial Odds Logistic Regression
-transdata17$PD_symptoms_index <- factor(transdata17$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
-olrMod <- polr(PD_symptoms_index ~ block + week*genotype, data = transdata17, Hess = TRUE, method = "logistic")
+transVCPdata$PD_symptoms_index <- factor(transVCPdata$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
+olrMod <- polr(PD_symptoms_index ~ block + week*genotype, data = transVCPdata, Hess = TRUE, method = "logistic")
 summary(olrMod)
 # Calculate p values from t statistic
 olrCoefs <- coef(summary(olrMod))
@@ -299,14 +299,42 @@ p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 
+##############################################################################################################
+#### Analysis of Xf pops in source plants
+## Linear model with transformation
+boxcox(xfpop + 1 ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
+# Best transformation is either sqrt or log; go with square root because the residuals look better
+sourcepopMod1 <- lm(sqrt(xfpop) ~ block + week*genotype, data = transVCPdata)
+plot(simulateResiduals(sourcepopMod1))
+## Residuals don't look very good
+summary(sourcepopMod1)
 
-# Summarising and plotting
-pdSummary <- transdata17 %>% group_by(week, genotype, trt) %>% 
+## Generalized linear model with quasipoisson distribution
+poispopMod1 <- glm(xfpop ~ block + week*genotype, data = transVCPdata, family = "quasipoisson")
+plot(poispopMod1)
+# Residuals look about the same as lm() with sqrt()
+summary(poispopMod1)
+
+## Negative binomial GLM
+sourcexfNB <- glm.nb(xfpop ~ block + week*genotype, data = transVCPdata)
+summary(sourcexfNB)
+## Results are qualitatively similar to quasipoisson but returns a warning. Quasipoisson also works better for 2016 data; go with that.
+
+#### NOTE ON ALTERNATIVE MODEL: Removing false negatives and all negatives had negligible effects on results.
+#### These models had reduced significance of week main effect but were otherwise unchanged.
+#### Log10 transformation works better if all negatives are removed
+
+
+##############################################################################################################
+#### Plotting PD symptoms, Xf pops, transmission, and acquisition from 2017
+
+#### Plotting PD symptoms
+## Summary
+pdSummary <- transVCPdata %>% group_by(week, genotype, trt) %>% 
   summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
             sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
 
-
-# PD symptoms plot
+## PD symptoms plot
 PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
   geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape=genotype, colour = trt), size=3.5) +
@@ -330,38 +358,40 @@ ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
        width = 7, height = 7, units = "in")
 
 
+#### Plotting source plant xf populations
+## Summary
+sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop+1), sqrtxfpop = sqrt(xfpop)) %>% 
+  group_by(week, genotype, trt) %>% 
+  summarise_at(c("logxfpop", "sqrtxfpop"), funs(mean = mean(.), n = sum(!is.na(.)), se = sd(.)/sqrt(sum(!is.na(.)))))
+
+## Xf pops in source plant plot
+sourcexfplot <- ggplot(data=sourceSummary, aes(x=week, y=sqrtxfpop_mean)) +
+  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
+  geom_errorbar(aes(ymax=sqrtxfpop_mean+sqrtxfpop_se, ymin=sqrtxfpop_mean-sqrtxfpop_se), width=0.2) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14)) + 
+  scale_y_continuous(name = "Xylella populations in source plant (square root)") +
+  # limits = c(0,10)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+sourcexfplot
+
+ggsave("results/figures/2017_figures/source_xf_sqrt_line_plot_2017.jpg", plot = sourcexfplot,
+       width = 7, height = 7, units = "in")
 
 
-##############################################################################################################
-#### Analysis of transmission data with binomial GLM
-
-# How many trials have positive test plant and positive pre-screen plant?
-transdata17 %>% dplyr::filter((grepl("PS plant positive", notes) & test_plant_infection == 1))
-# Remove trials where test plant is positive and pre-screen plant is positive
-transdata2 <- transdata17 %>% dplyr::filter(!(grepl("PS plant positive", notes) & test_plant_infection == 1))
-
-transMod1 <- glm(test_plant_infection ~ block + week*genotype, family = "binomial", data = transdata2)
-summary(transMod1)
-transMod2 <- glm(test_plant_infection ~ block + week*trt, family = "binomial", data = transdata2)
-transMod3 <- glm(test_plant_infection ~ block + week, family = "binomial", data = transdata2)
-transMod4 <- glm(test_plant_infection ~ week*trt, family = "binomial", data = transdata2)
-transMod5 <- glm(test_plant_infection ~ week + trt, family = "binomial", data = transdata2)
-AICctab(transMod1, transMod2, transMod3, transMod4, transMod5, base = TRUE)
-summary(transMod3)
-# Note: best model doesn't include treatment or genotype, no difference there. And no trend with week; however, this is testing for a linear trend with week.
-
-#### Summary by block
-blockTrans <- transdata2 %>% group_by(block) %>% 
-  summarise(percInfected = 100*(sum(test_plant_infection)/length(test_plant_infection)))
-
-#### Summarize and plot data
-transSummary <- transdata2 %>% group_by(week, genotype, trt) %>% 
-  summarise(n = length(test_plant_infection),
-            nInfected = sum(test_plant_infection),
-            propInfected = nInfected/n)
 
 
-# Transmission plot
+#### Plotting raw transmission
 transplot <- ggplot(data=transSummary, aes(x=week, y=propInfected)) +
   geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape=genotype, colour = trt), size=3.5) +
