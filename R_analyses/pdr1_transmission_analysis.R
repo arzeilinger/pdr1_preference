@@ -269,6 +269,107 @@ ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfect
 
 ##############################################################################################################
 #### Non-linear models of transmission
+##############################################################################################################
+
+## Load NLL functions for all models
+source("R_functions/nll_functions_pdr1.R")
+
+# Setting up data
+transSummarynl16 <- transdata %>% group_by(week, trt) %>% 
+  summarise(n = length(test.plant.infection),
+            nInfected = sum(test.plant.infection, na.rm = TRUE),
+            propInfected = nInfected/n)
+transSummarynl16
+
+
+#### Initial parameters
+## Initial parameters for linear model
+a.l0 <- 1 # Y-intercept assumed at 0
+b.l0 <- -0.5/8 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+
+## Initial parameters for Holling Type IV
+a0 <- 0.1 # Asymptotic propInfected
+# Assume peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
+b0 <- 8
+c0 <- -2
+
+## Initial parameters for Ricker model
+a.rick0 <- 0.75*(1/8)/exp(-1) # Estimate of a from estimate of b and peak transmission
+b.rick0 <- 1/8 # x value for the peak
+
+## Initial parameters for Logistic Growth model
+b.logist0 <- (0.125-0.75)/(12-3)/4 # Initial slope of the line divided by 4
+a.logist0 <- -6*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
+
+## Initial parameters for Michaelis-Menten model
+a.mm0 <- 0.25 # Asymptote
+b.mm0 <- 8 # value of x when y = a/2
+
+
+##############################################################################################################
+#### Fitting multiple non-linear models to Resistant and Susceptible trts separately
+
+# Get data sets
+transR <- transSummarynl16[transSummarynl16$trt == "R",]
+transS <- transSummarynl16[transSummarynl16$trt == "S",]
+
+
+#### Fitting resistant line data
+transRresults16 <- optimizeTransModels(dat = transR, nbugs = 8)
+(modelSelectR <- transRresults16[[2]])
+opListR <- transRresults16[[1]]
+
+# Get model predictions for plotting
+bestModR <- opListR$rickerOp # Holling4 model is the best
+bestcoefR <- as.list(coef(bestModR))
+
+newDatR <- data.frame(week = seq(0, 12, length = 101))
+newDatR$propInfected <- with(newDatR, bestcoefR$a*week*exp(-bestcoefR$b*week))
+
+newDatR$propInfected <- with(newDatR, (exp(bestcoefR$a+bestcoefR$b*week)/1+exp(bestcoefR$a+bestcoefR$b*week)))
+
+#### Fitting susceptible line data
+transSresults16 <- optimizeTransModels(dat = transS, nbugs = 8)
+(modelSelectS <- transSresults16[[2]])
+opListS <- transSresults16[[1]]
+
+# Get model predictions for plotting
+bestModS <- opListS$rickerOp # Ricker model is the best
+bestcoefS <- as.list(coef(bestModS))
+
+newDatS <- data.frame(week = seq(0, 12, length = 101))
+newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
+
+
+#### Plotting results
+# Plot S and R genotypes summarised together
+# Use Ricker model for S and Holling 4 model for R
+# Transmission plot
+transplotNL16 <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
+  #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
+  geom_point(aes(shape = trt, colour = trt), size=3.5) +
+  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
+  # Defining the colors for the lines based on the default ggplot2 colors and ggplot_build()$data
+  geom_smooth(data = newDatR, method = "loess", colour = "#F8766D", se = FALSE) +
+  geom_smooth(data = newDatS, method = "loess", colour = "#00BFC4", se = FALSE) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12)) + 
+  scale_y_continuous(name = "Proportion test plants positive for Xylella",
+                     limits = c(0,1)) +
+  # ylab("% insects on source plant") + 
+  # ylim(c(0,100)) +
+  # xlab("Weeks post inoculation") +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+transplotNL16
+
+ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL,
+       width = 7, height = 7, units = "in")
 
 
 
@@ -437,7 +538,7 @@ transdata2 <- transVCPdata[-badTrials,]
 with(transdata2, table(week, genotype))
 
 # Setting up data
-transSummarynl <- transdata2 %>% group_by(week, trt) %>% 
+transSummarynl17 <- transdata2 %>% group_by(week, trt) %>% 
   summarise(n = length(test_plant_infection),
             nInfected = sum(test_plant_infection),
             propInfected = nInfected/n)
@@ -472,14 +573,14 @@ b.mm0 <- 6 # value of x when y = a/2
 #### Fitting multiple non-linear models to Resistant and Susceptible trts separately
 
 # Get data sets
-transR <- transSummarynl[transSummarynl$trt == "R",]
-transS <- transSummarynl[transSummarynl$trt == "S",]
+transR <- transSummarynl17[transSummarynl17$trt == "R",]
+transS <- transSummarynl17[transSummarynl17$trt == "S",]
 
 
 #### Fitting resistant line data
-transRresults <- optimizeTransModels(dat = transR, nbugs = 16)
-(modelSelectR <- transRresults[[2]])
-opListR <- transRresults[[1]]
+transRresults17 <- optimizeTransModels(dat = transR, nbugs = 16)
+(modelSelectR <- transRresults17[[2]])
+opListR <- transRresults17[[1]]
 
 # Get model predictions for plotting
 bestModR <- opListR$holling4Op # Holling4 model is the best
@@ -489,9 +590,9 @@ newDatR <- data.frame(week = seq(2, 14, length = 101))
 newDatR$propInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 #### Fitting susceptible line data
-transSresults <- optimizeTransModels(dat = transS, nbugs = 16)
-(modelSelectS <- transSresults[[2]])
-opListS <- transSresults[[1]]
+transSresults17 <- optimizeTransModels(dat = transS, nbugs = 16)
+(modelSelectS <- transSresults17[[2]])
+opListS <- transSresults17[[1]]
 
 # Get model predictions for plotting
 bestModS <- opListS$rickerOp # Ricker model is the best
@@ -505,7 +606,7 @@ newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
 # Plot S and R genotypes summarised together
 # Use Ricker model for S and Holling 4 model for R
 # Transmission plot
-transplotNL <- ggplot(data=transSummarynl, aes(x=week, y=propInfected)) +
+transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
   #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape = trt, colour = trt), size=3.5) +
   #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
@@ -526,8 +627,8 @@ transplotNL <- ggplot(data=transSummarynl, aes(x=week, y=propInfected)) +
         panel.border = element_rect(colour = "black"),
         panel.background = element_blank()) 
 
-transplotNL
+transplotNL17
 
-ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL,
+ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL17,
        width = 7, height = 7, units = "in")
 
