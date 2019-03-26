@@ -4,7 +4,7 @@ rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
                  "bbmle", "glmnetUtils", "caret",
-                 "modeest")
+                 "modeest", "cowplot")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -45,6 +45,11 @@ enetTransdata <- transdata %>% mutate(log.source.cfu = log10(source.cfu.per.g+1)
                                       test.plant.infection = factor(ifelse(test.plant.infection == 1, "infected", "non_infected"))) %>%
   dplyr::select(test.plant.infection, trtNumeric, propVectorInfected, log.source.cfu, pd_index, mu1, mu2, p1, p2) %>%
   dplyr::filter(complete.cases(.))
+## Switch factor level order to get correct sign on coefficient estimates
+enetTransdata$test.plant.infection <- factor(enetTransdata$test.plant.infection, levels(enetTransdata$test.plant.infection)[c(2,1)])
+## "non-infected" should be the first level
+levels(enetTransdata$test.plant.infection)
+
 str(enetTransdata)
 
 
@@ -136,7 +141,7 @@ enet3 <- glmnetUtils::glmnet(test.plant.infection ~ ., data = enetTransdata, fam
 ## Run it in a for loop instead
 
 ## Number of runs
-nrun <- 100
+nrun <- 500
 
 ## Empty vectors for coefficients and best tune parameters
 enetResultsList <- enetBestTuneList <- vector("list", nrun)
@@ -158,15 +163,44 @@ enetBestTune <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
 hist(enetBestTune$alpha)
 hist(enetBestTune$lambda)
 ## Get mode of alpha and lambda
-modeTune <- apply(enetBestTune, 2, mfv)
+(modeTune16 <- apply(enetBestTune, 2, mfv))
 
 #### Combine runs and summarize coefficient estimates
 enetResultsData <- enetResultsList %>% rbindlist() %>% as.data.frame()
-enetSummary <- data.frame(meancoef = apply(enetResultsData, 2, mean),
+enetSummary16 <- data.frame(meancoef = apply(enetResultsData, 2, mean),
                           mediancoef = apply(enetResultsData, 2, median),
                           sdcoef = apply(enetResultsData, 2, sd))
 
-saveRDS(list(modeTune, enetSummary), file = "results/multi-run_CV_elastic_net_transmission_results_2016.rds")
+saveRDS(list(modeTune16, enetSummary16), file = "results/multi-run_CV_elastic_net_transmission_results_2016.rds")
+
+
+#### Plot Elastic Net results
+## Vector of clear names for covariates
+enetSummary16$niceNames <- c("Intercept", "Resistant/Susceptible cultivars", "Prop. infectious vectors",
+                             "Xylella population size in infected plant", "PD disese severity", 
+                             "Leaving rate from infected plant", "Leaving rate from test plant",
+                             "Attraction rate from infected plant", "Attraction rate from test plant")
+enetSummary16$niceNames <- factor(enetSummary16$niceNames, levels = enetSummary16$niceNames[order(enetSummary16$meancoef, decreasing = FALSE)])
+
+
+trans16enetPlot <- ggplot(enetSummary16, aes(y = niceNames, x = meancoef)) +
+  geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
+  geom_point(size = 3) +
+  geom_vline(linetype = "longdash", xintercept = 0) +
+  xlab("Coefficient estimate") + ylab("Covariate") + 
+  theme_bw() + 
+  theme(axis.line = element_line(colour = "black"),
+        text = element_text(size = 12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+trans16enetPlot
+
+ggsave(filename = "results/figures/2016_figures/transmission_2016_elastic_net_coefficients_plot.tiff", 
+       plot = trans16enetPlot,
+       width = 12, height = 7, units = "in")
 
 
 ######################################################################################################
@@ -184,7 +218,7 @@ summary(transVCPdata)
 ## choice2 = test plant
 
 #### Remove mu2 outlier
-transVCPdata <- transVCPdata %>% dplyr::filter(mu2 < max(mu2))
+transVCPdata <- transVCPdata %>% dplyr::filter(mu2 < 7)
 
 #### Full linear model
 FullModel <- glm(test_plant_infection ~ week*genotype + PD_symptoms_index + propInfectious + log10(xfpop+1) + mu1 + mu2 + p1 + p2,
@@ -240,6 +274,7 @@ plot(lassoTransCV)
 coef(lassoTransCV, s = lassoTransCV$lambda.min)
 
 
+#####################################################################################################################
 #### Transmission analysis using elastic net and the caret package
 ## Glmnet wants the data to be matrices, not data frames.
 x_train <- enetTransdata %>% dplyr::select(-test_plant_infection) %>% as.matrix()
@@ -253,9 +288,27 @@ train_control = trainControl(method = "cv",
                              number = 5, returnResamp = "all",
                              classProbs = TRUE, summaryFunction = twoClassSummary,
                              savePredictions = "final")
-## Create a custom tuning grid.
-enet_grid = expand.grid(alpha = seq(0, 1, by = 0.1),
-                        lambda = lambdas) # doing an exponential scale allows to explore more space of lambda values
+
+#### Create a custom tuning grid.
+## Find max lambda for cross validation
+## Formula found here: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+## Need to center and scale predictors first
+xenet <- enetTransdata %>% dplyr::select(-test_plant_infection) %>% scale(., center = TRUE, scale = TRUE)
+yenet <- ifelse(enetTransdata$test_plant_infection == "infected", 1, 0)
+lambdaMax <- apply(xenet, 2, function(x) sum(yenet*x)) %>% max()
+## set upper limit for lamba range based on lambdaMax and alpha
+## from this website: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+alphas = seq(0, 1, by = 0.1)
+lambdaMaxAdj <- 1/(1-alphas)*lambdaMax
+lambdaMaxAdj[lambdaMaxAdj == Inf] <- max(lambdaMaxAdj[lambdaMaxAdj != Inf])
+enetTuneList <- vector("list", length(alphas))
+for(i in 1:length(alphas)){
+  enetTuneList[[i]] <- expand.grid(alpha = alphas[i], 
+                                   lambda = seq(0, lambdaMaxAdj[i], length.out = 20))
+}
+enet_grid <- enetTuneList %>% rbindlist() %>% as.data.frame()
+
+## Run cross-validation once
 enet = train(x_train, y_train, method = "glmnet",
              metric = "ROC",
              preProcess = c("center", "scale"),
@@ -276,7 +329,7 @@ enet3 <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, fam
 ## Run caret::train() through for loop
 
 ## Number of runs
-nrun <- 100
+nrun <- 500
 
 ## Empty vectors for coefficients and best tune parameters
 enetResultsList <- enetBestTuneList <- vector("list", nrun)
@@ -294,38 +347,38 @@ for(i in 1:nrun){
 }
 
 ## Combine and summarize best tuning parameters
-enetBestTune <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
-hist(enetBestTune$alpha)
-hist(enetBestTune$lambda)
+enetBestTune17 <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
+hist(enetBestTune17$alpha)
+hist(enetBestTune17$lambda)
 ## Get mode of alpha and lambda
-modeTune <- apply(enetBestTune, 2, mfv)
+modeTune17 <- apply(enetBestTune17, 2, mfv)
 
 #### Combine runs and summarize coefficient estimates
 enetResultsData <- enetResultsList %>% rbindlist() %>% as.data.frame()
-enetSummary <- data.frame(meancoef = apply(enetResultsData, 2, mean),
+enetSummary17 <- data.frame(meancoef = apply(enetResultsData, 2, mean),
                           mediancoef = apply(enetResultsData, 2, median),
                           sdcoef = apply(enetResultsData, 2, sd))
 
-saveRDS(list(modeTune, enetSummary), file = "results/multi-run_CV_elastic_net_transmission_results_2017.rds")
+saveRDS(list(modeTune17, enetSummary17), file = "results/multi-run_CV_elastic_net_transmission_results_2017.rds")
 
 
 #### Plot Elastic Net results
 ## Vector of clear names for covariates
-enetSummary$niceNames <- c("Intercept", "Resistant/Susceptible cultivars", "PD disese severity", 
+enetSummary17$niceNames <- c("Intercept", "Resistant/Susceptible cultivars", "PD disese severity", 
                "Prop. infectious vectors", "Xylella population size in infected plant", 
                "Leaving rate from infected plant", "Leaving rate from test plant",
                "Attraction rate from infected plant", "Attraction rate from test plant")
-enetSummary$niceNames <- factor(enetSummary$niceNames, levels = enetSummary$niceNames[order(enetSummary$meancoef, decreasing = FALSE)])
+enetSummary17$niceNames <- factor(enetSummary17$niceNames, levels = enetSummary17$niceNames[order(enetSummary17$meancoef, decreasing = FALSE)])
 
 
-trans17enetPlot <- ggplot(enetSummary, aes(y = niceNames, x = meancoef)) +
+trans17enetPlot <- ggplot(enetSummary17, aes(y = niceNames, x = meancoef)) +
   geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
   geom_point(size = 3) +
   geom_vline(linetype = "longdash", xintercept = 0) +
   xlab("Coefficient estimate") + ylab("Covariate") + 
   theme_bw() + 
   theme(axis.line = element_line(colour = "black"),
-        text = element_text(size = 20),
+        text = element_text(size = 12),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
@@ -387,14 +440,17 @@ ggsave(filename = "results/figures/2017_figures/transmission_mu2_2017_scatter_pl
        width = 7, height = 7, units = "in")
 
 
-#####################################################################################################
-#### GAM model
-#####################################################################################################
 
-trans17gam <- gam(test_plant_infection ~ s(propInfectious) + s(log10(xfpop+1)) + s(mu1) + s(mu2) + s(p1) + s(p2), data = transVCPdata, family = "binomial")
-summary(trans17gam)
-plot(trans17gam)
+#####################################################################################################
+#### Combining Elastic Net results from 2016 and 2017 into multi-panel figure
 
+enfigure <- plot_grid(trans16enetPlot, trans17enetPlot,
+                      align = "v", ncol = 1, nrow = 2, labels = "AUTO", label_size = 14)
+enfigure
+
+ggsave(filename = "results/figures/elastic_net_coefficients_both_years_plots.tiff",
+       plot = enfigure,
+       width = 15, height = 15, units = "cm", dpi = 300, compression = "lzw")
 
 
 

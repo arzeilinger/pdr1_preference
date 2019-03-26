@@ -201,8 +201,11 @@ summary(vectorData3)
 
 #### Poisson regression with experimental treatments
 acqMod <- glm(totalInfectious ~ block + week*genotype, data = vectorData3, family = "poisson")
-plot(acqMod)
+plot(simulateResiduals(acqMod))
+testOverdispersion(simulateResiduals(acqMod))
+## Data are definitely overdispered
 summary(acqMod)
+
 
 ## quasi-Possion regression
 acqMod2 <- glm(totalInfectious ~ block + week*genotype, data = vectorData3, family = "quasipoisson")

@@ -3,31 +3,36 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "ggplot2",
-                 "MASS", "logistf", "multcomp", "bbmle", "lme4", "googlesheets")
+                 "MASS", "logistf", "multcomp", "bbmle", "lme4", "googlesheets", "DHARMa")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
 
 
 #### Munging source plant culturing data moved to "munging_pdr1_preference_transmission_data.R"
-
+## Load complete data set
+transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
 
 
 #### Analysis of source plant xf populations
-# Linear model with transformation
-boxcox(xfpop + 1 ~ block + week*genotype, data = sourcedata2, lambda = seq(-2, 2, by=0.5))
+## Linear model with transformation
+boxcox(xfpop + 1 ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
 # Best transformation is either sqrt or log; go with square root because the residuals look better
-sourcepopMod1 <- lm(sqrt(xfpop) ~ block + week*genotype, data = sourcedata2)
-plot(sourcepopMod1)
-anova(sourcepopMod1)
+sourcepopMod1 <- lm(sqrt(xfpop) ~ block + week*genotype, data = transVCPdata)
+plot(simulateResiduals(sourcepopMod1))
+## Residuals don't look very good
 summary(sourcepopMod1)
 
-# Generalized linear model with quasipoisson distribution
-poispopMod1 <- glm(xfpop ~ block + week*genotype, data = sourcedata2, family = "quasipoisson")
+## Generalized linear model with quasipoisson distribution
+poispopMod1 <- glm(xfpop ~ block + week*genotype, data = transVCPdata, family = "quasipoisson")
 plot(poispopMod1)
 # Residuals look about the same as lm() with sqrt()
 summary(poispopMod1)
 
+## Negative binomial GLM
+sourcexfNB <- glm.nb(xfpop ~ block + week*genotype, data = transVCPdata)
+summary(sourcexfNB)
+## Results are qualitatively similar to quasipoisson but returns a warning. Quasipoisson also works better for 2016 data; go with that.
 
 #### NOTE ON ALTERNATIVE MODEL: Removing false negatives and all negatives had negligible effects on results.
 #### These models had reduced significance of week main effect but were otherwise unchanged.

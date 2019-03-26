@@ -130,16 +130,68 @@ dev.off()
 #### Inspection of correlation matrices for consecutive choices assumption
 ###############################################################################
 
-#### Too few movement events from the assumptions test for contingency table
-## Contingency table
+
+#### Contingency table
 cchoiceData <- gs_read(pdr1DataURL, ws = "choice_contingency_table")
 str(cchoiceData)
 ctable <- with(cchoiceData, table(choice1, choice2))
+## Too few movement events from the assumptions test for contingency table
 
-#### MLE correlation matrices from 2016
+
+###############################################################################
+#### 2016 MLE correlation matrices
 corrMat16 <- readRDS("output/cmm_parameter_correlation_matrices_2016.rds")
 
 ## Drop week 12.2 trials from output list
 corrTableList <- lapply(3:length(corrMat16), function(x) extractCorrelationMatrix(corrMat16[[x]]))
 names(corrTableList) <- names(corrMat16)[3:length(corrMat16)]
-write.xlsx(corrTableList, file = "results/cmm_assumptions_correlation_tables_2016.xlsx")
+
+## Write all correlation matrices to a single Excel worksheet
+wb <- createWorkbook()
+addWorksheet(wb, sheetName = "corr_matrices_2016")
+startRows <- seq(2,2+6*6,by=6)
+
+for(i in 1:length(corrTableList)){
+  writeData(wb, sheet = "corr_matrices_2016", x = corrTableList[[i]], startCol = 2, startRow = startRows[i])
+  writeData(wb, sheet = "corr_matrices_2016", x = names(corrTableList)[i], startCol = 1, startRow = startRows[i])
+}
+
+
+#### How many correlations across week.genotype combinations are < 0.5?
+lowcor <- totals <- rep(0, length(corrTableList))
+for(i in 1:length(corrTableList)){
+  cor.i <- corrTableList[[i]][,-1]
+  lowcor[i] <- sum(cor.i < 0.5)
+  totals[i] <- sum(dim(cor.i)) - sum(cor.i == 1)
+}
+proplowcor <- sum(lowcor)/sum(totals)
+
+###############################################################################
+#### 2017 MLE correlation matrices
+
+corrMat17 <- readRDS("output/cmm_parameter_correlation_matrices_2017.rds")
+
+corrTableList17 <- lapply(1:length(corrMat17), function(x) extractCorrelationMatrix(corrMat17[[x]]))
+names(corrTableList17) <- names(corrMat17)
+
+## Write all correlation matrices to a single Excel worksheet
+addWorksheet(wb, sheetName = "corr_matrices_2017")
+startRows <- seq(2,2+6*length(corrTableList17),by=6)
+
+for(i in 1:length(corrTableList17)){
+  writeData(wb, sheet = "corr_matrices_2017", x = corrTableList17[[i]], startCol = 2, startRow = startRows[i])
+  writeData(wb, sheet = "corr_matrices_2017", x = names(corrTableList17)[i], startCol = 1, startRow = startRows[i])
+}
+
+saveWorkbook(wb, file = "results/cmm_assumptions_correlation_tables.xlsx")
+
+
+#### How many correlations across week.genotype combinations are < 0.5?
+lowcor <- totals <- rep(0, length(corrTableList17))
+for(i in 1:length(corrTableList17)){
+  cor.i <- corrTableList17[[i]][,-1]
+  lowcor[i] <- sum(cor.i < 0.5, na.rm = TRUE)
+  totals[i] <- sum(dim(cor.i)) - sum(is.na(cor.i)) - sum(cor.i == 1, na.rm = TRUE)
+}
+## Proportion of correlations that were below 0.5
+sum(lowcor)/sum(totals)
