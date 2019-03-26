@@ -2,8 +2,8 @@
 
 rm(list = ls())
 # Load packages
-my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googlesheets", "caret",
-                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "glmnet", "glmnetUtils")
+my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googlesheets",
+                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "cowplot")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -316,27 +316,47 @@ transS <- transSummarynl16[transSummarynl16$trt == "S",]
 
 #### Fitting resistant line data
 transRresults16 <- optimizeTransModels(dat = transR, nbugs = 8)
-(modelSelectR <- transRresults16[[2]])
+(modelSelectR16 <- transRresults16[[2]])
 opListR <- transRresults16[[1]]
 
 # Get model predictions for plotting
-bestModR <- opListR$rickerOp # Holling4 model is the best
+bestModR <- opListR$rickerOp 
+# Logistic, Ricker, and Linear are all equivalent; only Ricker makes sense if we assume dynamics start at origin
 bestcoefR <- as.list(coef(bestModR))
 
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciR16 <- confint(bestModR)
+paramR16 <- data.frame(dataset = "R16",
+                       model = "Ricker",
+                       coef = row.names(ciR16),
+                       estimate = coef(bestModR),
+                       cil = ciR16[,1],
+                       ciu = ciR16[,2])
+
+## Predict propInfected from model
 newDatR <- data.frame(week = seq(0, 12, length = 101))
 newDatR$propInfected <- with(newDatR, bestcoefR$a*week*exp(-bestcoefR$b*week))
 
-newDatR$propInfected <- with(newDatR, (exp(bestcoefR$a+bestcoefR$b*week)/1+exp(bestcoefR$a+bestcoefR$b*week)))
-
 #### Fitting susceptible line data
 transSresults16 <- optimizeTransModels(dat = transS, nbugs = 8)
-(modelSelectS <- transSresults16[[2]])
+(modelSelectS16 <- transSresults16[[2]])
 opListS <- transSresults16[[1]]
 
-# Get model predictions for plotting
+## Get model predictions for plotting
 bestModS <- opListS$rickerOp # Ricker model is the best
 bestcoefS <- as.list(coef(bestModS))
 
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciS16 <- confint(bestModS)
+paramS16 <- data.frame(dataset = "S16",
+                       model = "Ricker",
+                       coef = row.names(ciS16),
+                       estimate = coef(bestModS),
+                       cil = ciS16[,1],
+                       ciu = ciS16[,2])
+nlParamTable <- rbind(paramR16, paramS16)
+
+## Predict propInfected from model
 newDatS <- data.frame(week = seq(0, 12, length = 101))
 newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
@@ -346,29 +366,27 @@ newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
 # Use Ricker model for S and Holling 4 model for R
 # Transmission plot
 transplotNL16 <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
-  #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
-  geom_point(aes(shape = trt, colour = trt), size=3.5) +
-  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  # Defining the colors for the lines based on the default ggplot2 colors and ggplot_build()$data
-  geom_smooth(data = newDatR, method = "loess", colour = "#F8766D", se = FALSE) +
-  geom_smooth(data = newDatS, method = "loess", colour = "#00BFC4", se = FALSE) +
+  # R = Circles and solid line
+  # S = Triangles and dashed line
+  geom_point(aes(shape = trt), size=2) +
+  geom_smooth(data = newDatR, method = "loess", colour = "black", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatS, method = "loess", colour = "black", linetype = 2, se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Proportion test plants positive for Xylella",
+                     breaks = c(3,8,12), limits = c(0,12)) + 
+  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
                      limits = c(0,1)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
+  scale_shape_manual(values = c(16, 1)) +
+  theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        legend.position = "none")
 
 transplotNL16
 
-ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL,
+ggsave("results/figures/2016_figures/transmission_non-linear_plot_2016.jpg", plot = transplotNL16,
        width = 7, height = 7, units = "in")
 
 
@@ -579,33 +597,57 @@ transS <- transSummarynl17[transSummarynl17$trt == "S",]
 
 #### Fitting resistant line data
 transRresults17 <- optimizeTransModels(dat = transR, nbugs = 16)
-(modelSelectR <- transRresults17[[2]])
+(modelSelectR17 <- transRresults17[[2]])
 opListR <- transRresults17[[1]]
 
 # Get model predictions for plotting
 bestModR <- opListR$holling4Op # Holling4 model is the best
 bestcoefR <- as.list(coef(bestModR))
 
-newDatR <- data.frame(week = seq(2, 14, length = 101))
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciR17 <- confint(bestModR, method = "quad")
+## Profile method doesn't work, try quadratic approximation
+hessR17 <- attr(bestModR, "details")$hessian
+seR17 <- sqrt(abs(diag(solve(hessR17))))
+paramR17 <- data.frame(dataset = "R17",
+                       model = "Holling_type_IV",
+                       coef = names(coef(bestModR)),
+                       estimate = coef(bestModR),
+                       cil = coef(bestModR) - seR17*1.96,
+                       ciu = coef(bestModR) + seR17*1.96)
+
+## Predict propInfected from model
+newDatR <- data.frame(week = seq(0, 14, length = 101))
 newDatR$propInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
+
 
 #### Fitting susceptible line data
 transSresults17 <- optimizeTransModels(dat = transS, nbugs = 16)
-(modelSelectS <- transSresults17[[2]])
+(modelSelectS17 <- transSresults17[[2]])
 opListS <- transSresults17[[1]]
 
 # Get model predictions for plotting
 bestModS <- opListS$rickerOp # Ricker model is the best
 bestcoefS <- as.list(coef(bestModS))
 
-newDatS <- data.frame(week = seq(2, 14, length = 101))
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciS17 <- confint(bestModS)
+paramS17 <- data.frame(dataset = "S17",
+                       model = "Ricker",
+                       coef = row.names(ciS17),
+                       estimate = coef(bestModS),
+                       cil = ciS17[,1],
+                       ciu = ciS17[,2])
+
+## Predict propInfected from model
+newDatS <- data.frame(week = seq(0, 14, length = 101))
 newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
 
 #### Plotting results
 # Plot S and R genotypes summarised together
 # Use Ricker model for S and Holling 4 model for R
-# Transmission plot
+# Transmission plot in color
 transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
   #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(shape = trt, colour = trt), size=3.5) +
@@ -614,8 +656,8 @@ transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
   geom_smooth(data = newDatR, method = "loess", colour = "#F8766D", se = FALSE) +
   geom_smooth(data = newDatS, method = "loess", colour = "#00BFC4", se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Proportion test plants positive for Xylella",
+                     breaks = c(2,5,8,14), limits = c(0,14)) + 
+  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
                      limits = c(0,1)) +
   # ylab("% insects on source plant") + 
   # ylim(c(0,100)) +
@@ -627,8 +669,66 @@ transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
         panel.border = element_rect(colour = "black"),
         panel.background = element_blank()) 
 
+
+#### 2017 transmission plot black and white
+transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
+  # R = Circles and solid line
+  # S = Triangles and dashed line
+  geom_point(aes(shape = trt), size=2) +
+  geom_smooth(data = newDatR, method = "loess", colour = "black", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatS, method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14), limits = c(0,14)) + 
+  scale_y_continuous(name = "",
+                     limits = c(0,1)) +
+  scale_shape_manual(values = c(16,1)) +
+  theme_bw(base_size=8) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        legend.position = "none") 
+
 transplotNL17
 
 ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL17,
        width = 7, height = 7, units = "in")
 
+
+#### Plot transmission dynamics plots for both years as multi-panel figure
+nl_trans_figure <- plot_grid(transplotNL16, transplotNL17,
+                             align = "h", ncol = 2, nrow = 1, 
+                             labels = "auto", label_x = 0.17, label_y = 0.98,
+                             label_size = 10)
+#fig2
+ggsave(filename = "results/figures/nl_transmission_figure.tiff",
+       plot = nl_trans_figure,
+       width = 14, height = 7, units = "cm", dpi = 300, compression = "lzw")
+
+#### Combine results from analyses for manuscript
+nlModelSelectionList <- list(modelSelectR16,
+                             modelSelectS16,
+                             modelSelectR17,
+                             modelSelectS17)
+names(nlModelSelectionList) <- c("R16", "S16", "R17", "S17")
+
+## Save parameter estimates to one sheet and all model selection tables to a second sheet of the same workbook
+wb <- createWorkbook()
+addWorksheet(wb, sheetName = "nl_model_selection_tables")
+startRows <- seq(1, length(nlModelSelectionList)*7)
+
+for(i in 1:length(nlModelSelectionList)){
+  modelSelectionDF <- data.frame(AICc = nlModelSelectionList[[i]]$AICc,
+                                 dAICc = nlModelSelectionList[[i]]$dAICc,
+                                 df = nlModelSelectionList[[i]]$df)
+  writeData(wb, sheet = "nl_model_selection_tables", x = modelSelectionDF, startCol = 2, startRow = i*7)
+  writeData(wb, sheet = "nl_model_selection_tables", x = names(nlModelSelectionList)[i], startCol = 1, startRow = i*7)
+}
+
+## Parameter estimates
+nlParamTable <- rbind(paramR16, paramS16, paramR17, paramS17)
+addWorksheet(wb, sheetName = "nl_parameter_estimates")
+writeData(wb, sheet = "nl_parameter_estimates", x = nlParamTable, startCol = 2, startRow = 2)
+
+saveWorkbook(wb, file = "results/nl_model_results_tables_both_years.xlsx")
