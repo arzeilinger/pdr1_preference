@@ -129,15 +129,6 @@ linearpois <- function(a, b, week, totalInfectious){
   #return(probTrans)
 }
 
-# linearNLL.trt <- function(a.r, a.s, b.r, b.s, week, nInfected){
-#   a <- c(a.r, a.s)[transSummarynl$trt]
-#   b <- c(b.r, b.s)[transSummarynl$trt]
-#   probTrans <- a + b*week
-#   nll <- -sum(dbinom(nInfected, prob = probTrans, size = 16, log = TRUE))
-#   ifelse(is.nan(nll), 1e07, nll)
-#   #return(probTrans)
-# }
-
 
 #### Holling Type IV NLL models
 holling4pois <- function(a, b, c, week, totalInfectious){

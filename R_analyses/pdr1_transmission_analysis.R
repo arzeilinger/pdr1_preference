@@ -719,8 +719,9 @@ addWorksheet(wb, sheetName = "nl_model_selection_tables")
 startRows <- seq(1, length(nlModelSelectionList)*7)
 
 for(i in 1:length(nlModelSelectionList)){
-  modelSelectionDF <- data.frame(AICc = nlModelSelectionList[[i]]$AICc,
-                                 dAICc = nlModelSelectionList[[i]]$dAICc,
+  modelSelectionDF <- data.frame(modelName = attr(nlModelSelectionList[[i]], "row.names"),
+                                 AICc = round(nlModelSelectionList[[i]]$AICc, 2),
+                                 dAICc = round(nlModelSelectionList[[i]]$dAICc, 2),
                                  df = nlModelSelectionList[[i]]$df)
   writeData(wb, sheet = "nl_model_selection_tables", x = modelSelectionDF, startCol = 2, startRow = i*7)
   writeData(wb, sheet = "nl_model_selection_tables", x = names(nlModelSelectionList)[i], startCol = 1, startRow = i*7)
@@ -728,7 +729,9 @@ for(i in 1:length(nlModelSelectionList)){
 
 ## Parameter estimates
 nlParamTable <- rbind(paramR16, paramS16, paramR17, paramS17)
+nlParamTable <- nlParamTable %>% mutate(estimateCI = paste(round(estimate, 3), " [", round(cil, 3), ", ", round(ciu,3), "]", sep = "")) %>%
+  dplyr::select(-estimate, -cil, -ciu)
 addWorksheet(wb, sheetName = "nl_parameter_estimates")
 writeData(wb, sheet = "nl_parameter_estimates", x = nlParamTable, startCol = 2, startRow = 2)
 
-saveWorkbook(wb, file = "results/nl_model_results_tables_both_years.xlsx")
+saveWorkbook(wb, file = "results/nl_model_transmission_results_tables_both_years.xlsx", overwrite = TRUE)
