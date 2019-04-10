@@ -7,6 +7,8 @@ my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googleshee
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
+# Load NLL functions for all models
+source("R_functions/nll_functions_pdr1.R")
 
 
 ######################################################################################################################
@@ -267,12 +269,129 @@ ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfect
        width = 7, height = 7, units = "in")
 
 
+
+##############################################################################################################
+#### Fitting non-linear models to acquisition data
+##############################################################################################################
+
+
+
+#### Initial parameters
+## Initial parameters for linear model
+a.l0 <- 0 # Y-intercept assumed at 0
+b.l0 <- 0.5/3 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+
+## Initial parameters for Holling Type IV
+a0 <- 0.1 # Asymptotic totalInfectious
+# Peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
+b0 <- 8
+c0 <- -2
+
+## Initial parameters for Ricker model
+a.rick0 <- 4/3 # Initial slope of the line
+b.rick0 <- 1/8 # x value for the peak
+
+## Initial parameters for Logistic Growth model
+b.logist0 <- 4/3/4 # Initial slope of the line divided by 4
+a.logist0 <- -4*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
+
+## Initial parameters for Michaelis-Menten model
+a.mm0 <- 8 # Asymptote
+b.mm0 <- 4 # value of x when y = a/2
+
+
+#### Fitting multiple non-linear models to Resistant and Susceptible trts separately
+
+# Get data sets
+vectorR <- transdata %>% dplyr::filter(trt == "R" & !is.na(totalVectorInfectious)) %>% rename(totalInfectious = totalVectorInfectious)
+vectorS <- transdata %>% dplyr::filter(trt == "S" & !is.na(totalVectorInfectious)) %>% rename(totalInfectious = totalVectorInfectious)
+
+#### Fitting resistant line data
+vectorRresults16 <- optimizeVectorModels(vectorR)
+(modelSelectR16 <- vectorRresults16[[2]])
+opListR <- vectorRresults16[[1]]
+
+# Get model predictions for plotting
+bestModR <- opListR$rickerOp # Ricker model is the best
+bestcoefR <- as.list(coef(bestModR))
+
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciR16 <- confint(bestModR)
+paramR16 <- data.frame(dataset = "R16",
+                       model = "Ricker",
+                       coef = names(coef(bestModR)),
+                       estimate = coef(bestModR),
+                       cil = ciR16[,1],
+                       ciu = ciR16[,2])
+
+newDatR <- data.frame(week = seq(0, 12, length = 101))
+newDatR$totalInfectious <- with(newDatR, bestcoefR$a*week*exp(-bestcoefR$b*week))
+
+
+#### Fitting susceptible line data
+vectorSresults16 <- optimizeVectorModels(vectorS)
+(modelSelectS16 <- vectorSresults16[[2]])
+opListS <- vectorSresults16[[1]]
+
+# Get model predictions for plotting
+# Multiple models are equivalently good, MM seems the most realistic and lowest AIC
+bestModS <- opListS$MMOp # Ricker model is the best
+bestcoefS <- as.list(coef(bestModS))
+
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciS16 <- confint(bestModS)
+paramS16 <- data.frame(dataset = "S16",
+                       model = "Michaelis_Menten",
+                       coef = names(coef(bestModS)),
+                       estimate = coef(bestModS),
+                       cil = ciS16[,1],
+                       ciu = ciS16[,2])
+
+newDatS <- data.frame(week = seq(0, 12, length = 101))
+newDatS$totalInfectious <- with(newDatS, ((bestcoefS$a*week)/(bestcoefS$b + week)))
+
+
+#### Plotting results
+## Calculate mean infectiousness for each trt and week
+vectorSummary16 <- transdata %>% dplyr::filter(!is.na(totalVectorInfectious)) %>% 
+  group_by(week, trt) %>% summarise(meanTotalInfectious = mean(totalVectorInfectious, na.rm = TRUE),
+                                    nTotalInfectious = length(totalVectorInfectious),
+                                    seTotalInfectious = sd(totalVectorInfectious, na.rm = TRUE)/sqrt(nTotalInfectious)) 
+vectorSummary16
+
+# Plot S and R genotypes summarised together
+# Use Holling 4 model for S and for R
+# Vector acquisition plot
+vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanTotalInfectious)) +
+  # R = Closed circles and solid line
+  # S = Open circles and dashed line
+  geom_point(aes(shape = trt), size=2) +
+  geom_errorbar(aes(ymax=meanTotalInfectious+seTotalInfectious, ymin=meanTotalInfectious-seTotalInfectious), width=0.2) +
+  geom_smooth(data = newDatR, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatS, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(3,8,12), limits = c(0,12)) + 
+  scale_y_continuous(name = "Mean number of infectious vectors",
+                     limits = c(-0.2,8.2)) +
+  scale_shape_manual(values = c(16,1)) +
+  theme_bw(base_size=8) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        legend.position = "none") 
+
+vectorplotNL16
+
+ggsave("results/figures/2016_figures/acquisition_non-linear_plot_2016.jpg", plot = vectorplotNL,
+       width = 7, height = 7, units = "in")
+
+
+
 ##############################################################################################################
 #### Non-linear models of transmission
 ##############################################################################################################
-
-## Load NLL functions for all models
-source("R_functions/nll_functions_pdr1.R")
 
 # Setting up data
 transSummarynl16 <- transdata %>% group_by(week, trt) %>% 
@@ -542,18 +661,178 @@ ggsave("results/figures/2017_figures/transmission_line_plot_2017.jpg", plot = tr
        width = 7, height = 7, units = "in")
 
 
-
 ##############################################################################################################
-#### Fitting non-linear models to transmission data
-
-# Load NLL functions for all models
-source("R_functions/nll_functions_pdr1.R")
-
+#### Fitting non-linear models to acquisition data
+##############################################################################################################
 
 ## Remove trials where pre-screen plant was positive and test plant was positive
 badTrials <- with(transVCPdata, which(grepl("PS plant positive", notes) & test_plant_infection == 1))
 transdata2 <- transVCPdata[-badTrials,]
 with(transdata2, table(week, genotype))
+
+
+#### Initial parameters
+## Initial parameters for linear model
+a.l0 <- 0 # Y-intercept assumed at 0
+b.l0 <- 0.5/14 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+
+## Initial parameters for Holling Type IV
+a0 <- 0.1 # Asymptotic propInfected
+# Peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
+b0 <- 8
+c0 <- -2
+
+## Initial parameters for Ricker model
+a.rick0 <- 0.25/5 # Initial slope of the line
+b.rick0 <- 1/8 # x value for the peak
+
+## Initial parameters for Logistic Growth model
+b.logist0 <- 0.25/5/4 # Initial slope of the line divided by 4
+a.logist0 <- -6*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
+
+## Initial parameters for Michaelis-Menten model
+a.mm0 <- 0.5 # Asymptote
+b.mm0 <- 6 # value of x when y = a/2
+
+
+#### Fitting multiple non-linear models to Resistant and Susceptible trts separately
+
+# Get data sets
+vectorR <- transdata2[transdata2$trt == "R",]
+vectorS <- transdata2[transdata2$trt == "S",]
+
+#### Fitting resistant line data
+vectorRresults17 <- optimizeVectorModels(vectorR)
+(modelSelectR17 <- vectorRresults17[[2]])
+opListR <- vectorRresults17[[1]]
+
+# Get model predictions for plotting
+bestModR <- opListR$holling4Op # Holling4 model is the best
+bestcoefR <- as.list(coef(bestModR))
+
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciR17 <- confint(bestModR, method = "quad")
+## Profile method doesn't work, try quadratic approximation
+hessR17 <- attr(bestModR, "details")$hessian
+seR17 <- sqrt(abs(diag(solve(hessR17))))
+paramR17 <- data.frame(dataset = "R17",
+                       model = "Holling_type_IV",
+                       coef = names(coef(bestModR)),
+                       estimate = coef(bestModR),
+                       cil = coef(bestModR) - seR17*1.96,
+                       ciu = coef(bestModR) + seR17*1.96)
+
+newDatR <- data.frame(week = seq(0, 14, length = 101))
+newDatR$totalInfectious <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
+
+
+#### Fitting susceptible line data
+vectorSresults17 <- optimizeVectorModels(vectorS)
+(modelSelectS17 <- vectorSresults17[[2]])
+opListS <- vectorSresults17[[1]]
+
+# Get model predictions for plotting
+bestModS <- opListS$holling4Op # Ricker model is the best
+bestcoefS <- as.list(coef(bestModS))
+
+## Estimate confidence intervals for model parameter estimates using profile method and combine data
+ciS17 <- confint(bestModS)
+paramS17 <- data.frame(dataset = "S17",
+                       model = "Holling_type_IV",
+                       coef = names(coef(bestModS)),
+                       estimate = coef(bestModS),
+                       cil = ciS17[,1],
+                       ciu = ciS17[,2])
+
+newDatS <- data.frame(week = seq(0, 14, length = 101))
+newDatS$totalInfectious <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
+
+
+#### Plotting results
+## Calculate mean infectiousness for each trt and week
+vectorSummary2 <- transdata2 %>% dplyr::filter(!is.na(totalInfectious)) %>% 
+  group_by(week, trt) %>% summarise(meanTotalInfectious = mean(totalInfectious, na.rm = TRUE),
+                                    nTotalInfectious = length(totalInfectious),
+                                    seTotalInfectious = sd(totalInfectious, na.rm = TRUE)/sqrt(nTotalInfectious)) 
+vectorSummary2
+
+# Plot S and R genotypes summarised together
+# Use Holling 4 model for S and for R
+# Vector acquisition plot
+vectorplotNL17 <- ggplot(data=vectorSummary2, aes(x=week, y=meanTotalInfectious)) +
+  # R = Closed circles and solid line
+  # S = Open circles and dashed line
+  geom_point(aes(shape = trt), size=2) +
+  geom_errorbar(aes(ymax=meanTotalInfectious+seTotalInfectious, ymin=meanTotalInfectious-seTotalInfectious), width=0.2) +
+  geom_smooth(data = newDatR, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatS, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14), limits = c(0,14)) + 
+  scale_y_continuous(name = "",
+                     limits = c(-0.2,8.2)) +
+  scale_shape_manual(values = c(16,1)) +
+  theme_bw(base_size=8) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        legend.position = "none") 
+
+vectorplotNL17
+
+ggsave("results/figures/2017_figures/acquisition_non-linear_plot_2017.jpg", plot = vectorplotNL17,
+       width = 7, height = 7, units = "in")
+
+
+#############################################################################################
+#### Combining non-linear acquisition model results from both years for paper
+
+#### Plot acquisition dynamics plots for both years as multi-panel figure
+nl_acq_figure <- plot_grid(vectorplotNL16, vectorplotNL17,
+                           align = "h", ncol = 2, nrow = 1, 
+                           labels = "auto", label_x = 0.17, label_y = 0.98,
+                           label_size = 10)
+#fig?
+ggsave(filename = "results/figures/nl_acquisition_figure.tiff",
+       plot = nl_acq_figure,
+       width = 14, height = 7, units = "cm", dpi = 300, compression = "lzw")
+
+#### Combine results from analyses for manuscript
+nlModelSelectionList <- list(modelSelectR16,
+                             modelSelectS16,
+                             modelSelectR17,
+                             modelSelectS17)
+names(nlModelSelectionList) <- c("R16", "S16", "R17", "S17")
+
+## Save parameter estimates to one sheet and all model selection tables to a second sheet of the same workbook
+wb <- createWorkbook()
+addWorksheet(wb, sheetName = "nl_model_selection_tables")
+startRows <- seq(1, length(nlModelSelectionList)*7)
+
+for(i in 1:length(nlModelSelectionList)){
+  modelSelectionDF <- data.frame(modelName = attr(nlModelSelectionList[[i]], "row.names"),
+                                 AICc = round(nlModelSelectionList[[i]]$AICc, 2),
+                                 dAICc = round(nlModelSelectionList[[i]]$dAICc, 2),
+                                 df = nlModelSelectionList[[i]]$df)
+  writeData(wb, sheet = "nl_model_selection_tables", x = modelSelectionDF, startCol = 2, startRow = i*7)
+  writeData(wb, sheet = "nl_model_selection_tables", x = names(nlModelSelectionList)[i], startCol = 1, startRow = i*7)
+}
+
+## Parameter estimates
+nlParamTable <- rbind(paramR16, paramS16, paramR17, paramS17)
+nlParamTable <- nlParamTable %>% mutate(estimateCI = paste(round(estimate, 3), " [", round(cil, 3), ", ", round(ciu,3), "]", sep = "")) %>%
+  dplyr::select(-estimate, -cil, -ciu)
+addWorksheet(wb, sheetName = "nl_parameter_estimates")
+writeData(wb, sheet = "nl_parameter_estimates", x = nlParamTable, startCol = 2, startRow = 2)
+
+saveWorkbook(wb, file = "results/nl_model_vector_acquisition_results_tables_both_years.xlsx", overwrite = TRUE)
+
+
+
+##############################################################################################################
+#### Fitting non-linear models to transmission data
+##############################################################################################################
 
 # Setting up data
 transSummarynl17 <- transdata2 %>% group_by(week, trt) %>% 
@@ -695,6 +974,9 @@ transplotNL17
 ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plot = transplotNL17,
        width = 7, height = 7, units = "in")
 
+
+##############################################################################
+#### Combining NL transmission results for paper 
 
 #### Plot transmission dynamics plots for both years as multi-panel figure
 nl_trans_figure <- plot_grid(transplotNL16, transplotNL17,

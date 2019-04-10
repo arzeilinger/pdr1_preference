@@ -198,6 +198,7 @@ ggsave("results/figures/2017_figures/infectious_vectors_line_plot_2017.jpg", plo
 vectorData3 <- readRDS("output/vector_acquisition_data_pdr1_2017.rds")
 str(vectorData3)
 summary(vectorData3)
+with(vectorData3, table(genotype, week))
 
 #### Poisson regression with experimental treatments
 acqMod <- glm(totalInfectious ~ block + week*genotype, data = vectorData3, family = "poisson")

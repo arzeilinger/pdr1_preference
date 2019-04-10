@@ -36,11 +36,14 @@ summary(FullModel)
 #### Look at relationships among variables
 transdata %>% dplyr::select(test.plant.infection, propVectorInfected, source.cfu.per.g, pd_index, p1, p2, mu1, mu2) %>% pairs()
 
+transdata %>% group_by(trt) %>% summarise(propInfected = sum(test.plant.infection, na.rm = TRUE)/length(test.plant.infection[!is.na(test.plant.infection)]))
+
 #### Transmission analysis using elastic net 
 ## Define lambda values
 lambdas <- 2^seq(-1, -8, length = 20)
 #### Using the glmnetUtils package
 enetTransdata <- transdata %>% mutate(log.source.cfu = log10(source.cfu.per.g+1),
+                                      # Trt code: R = 0, S = 1; so a positive relationship between trt and infection status indicates greater trans from Susceptible
                                       trtNumeric = as.numeric(trt) - 1,
                                       test.plant.infection = factor(ifelse(test.plant.infection == 1, "infected", "non_infected"))) %>%
   dplyr::select(test.plant.infection, trtNumeric, propVectorInfected, log.source.cfu, pd_index, mu1, mu2, p1, p2) %>%
@@ -174,20 +177,28 @@ enetSummary16 <- data.frame(meancoef = apply(enetResultsData, 2, mean),
 saveRDS(list(modeTune16, enetSummary16), file = "results/multi-run_CV_elastic_net_transmission_results_2016.rds")
 
 
+#### Read in 2016 elastic net results
+enet16list <- readRDS("results/multi-run_CV_elastic_net_transmission_results_2016.rds")
+enetSummary16 <- enet16list[[2]]
+
 #### Plot Elastic Net results
 ## Vector of clear names for covariates
-enetSummary16$niceNames <- c("Intercept", "Resistant/Susceptible cultivars", "Prop. infectious vectors",
-                             "Xylella population size in infected plant", "PD disese severity", 
-                             "Leaving rate from infected plant", "Leaving rate from test plant",
-                             "Attraction rate from infected plant", "Attraction rate from test plant")
-enetSummary16$niceNames <- factor(enetSummary16$niceNames, levels = enetSummary16$niceNames[order(enetSummary16$meancoef, decreasing = FALSE)])
-
+enetSummary16$niceNames <- factor(c("Intercept", "Resistant/Susceptible cultivars", "Prop. infectious vectors",
+                                    "Xylella population size in infected plant", "PD disese severity", 
+                                    "Leaving rate from infected plant", "Leaving rate from test plant",
+                                    "Attraction rate from infected plant", "Attraction rate from test plant"))
+levels(enetSummary16$niceNames)
+## Reorder factor levels according to coefficient estimate
+#enetSummary16$niceNames <- factor(enetSummary16$niceNames, levels = enetSummary16$niceNames[order(enetSummary16$meancoef, decreasing = FALSE)])
+## Reorder factor levels according to original order
+enetSummary16$niceNames <- with(enetSummary16, factor(niceNames, levels(niceNames)[c(3,8,7,9,6,1,2,4,5)]))
+levels(enetSummary16$niceNames)
 
 trans16enetPlot <- ggplot(enetSummary16, aes(y = niceNames, x = meancoef)) +
   geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
   geom_point(size = 3) +
   geom_vline(linetype = "longdash", xintercept = 0) +
-  xlab("Coefficient estimate") + ylab("Covariate") + 
+  xlab("Coefficient estimate") + ylab("") + 
   theme_bw() + 
   theme(axis.line = element_line(colour = "black"),
         text = element_text(size = 12),
@@ -227,8 +238,14 @@ plot(simulateResiduals(FullModel))
 summary(FullModel)
 
 #### Look at relationships among variables
-transVCPdata %>% dplyr::select(-week, -block, -genotype, -trt, -rep, -nbugs, -totalInfectious, -plantID, -Rep2) %>% pairs()
+transVCPdata %>% dplyr::select(-week, -block, -genotype, -trt, -rep, -notes, -nbugs, -totalInfectious, -plantID, -Rep2) %>% pairs()
+## Look at just p1 vs p2
+tiff("output/figures/attraction_rates_2017_scatterplot.tiff")
+  with(transVCPdata, plot(x=p1, y=p2, xlab = "Attraction rate to source plant", ylab = "Attraction rate to test plant"))
+dev.off()
 
+
+transVCPdata %>% group_by(trt) %>% summarise(propInfected = sum(test_plant_infection)/length(test_plant_infection))
 
 ######################################################################################################
 #### Transmission analysis using elastic net 
@@ -237,7 +254,8 @@ lambdas <- 2^seq(-1, -8, length = 20)
 
 #### Using the glmnetUtils package
 enetTransdata <- transVCPdata %>% mutate(log.xfpop = log10(xfpop+1),
-                                         trtNumeric = as.numeric(trt) - 1,
+                                         # Trt code: R = 0, S = 1; so a positive relationship between trt and infection status indicates greater trans from Susceptible
+                                         trtNumeric = as.numeric(trt) - 1, 
                                          test_plant_infection = factor(ifelse(test_plant_infection == 1, "infected", "non_infected"))) %>%
   dplyr::select(test_plant_infection, trtNumeric, PD_symptoms_index, propInfectious, log.xfpop, mu1, mu2, p1, p2) %>%
   dplyr::filter(complete.cases(.))
@@ -362,20 +380,30 @@ enetSummary17 <- data.frame(meancoef = apply(enetResultsData, 2, mean),
 saveRDS(list(modeTune17, enetSummary17), file = "results/multi-run_CV_elastic_net_transmission_results_2017.rds")
 
 
+#### Read in 2017 elastic net results
+enet17list <- readRDS("results/multi-run_CV_elastic_net_transmission_results_2017.rds")
+enetSummary17 <- enet17list[[2]]
+
 #### Plot Elastic Net results
 ## Vector of clear names for covariates
-enetSummary17$niceNames <- c("Intercept", "Resistant/Susceptible cultivars", "PD disese severity", 
-               "Prop. infectious vectors", "Xylella population size in infected plant", 
-               "Leaving rate from infected plant", "Leaving rate from test plant",
-               "Attraction rate from infected plant", "Attraction rate from test plant")
-enetSummary17$niceNames <- factor(enetSummary17$niceNames, levels = enetSummary17$niceNames[order(enetSummary17$meancoef, decreasing = FALSE)])
+enetSummary17$niceNames <- factor(c("Intercept", "Resistant/Susceptible cultivars", "PD disese severity", 
+                                    "Prop. infectious vectors", "Xylella population size in infected plant", 
+                                    "Leaving rate from infected plant", "Leaving rate from test plant",
+                                    "Attraction rate from infected plant", "Attraction rate from test plant"))
+levels(enetSummary17$niceNames)
+## Reorder factor levels according to coefficient estimate
+#enetSummary17$niceNames <- factor(enetSummary17$niceNames, levels = enetSummary17$niceNames[order(enetSummary17$meancoef, decreasing = FALSE)])
+## Reorder factor levels according to original order
+enetSummary17$niceNames <- with(enetSummary17, factor(niceNames, levels(niceNames)[c(3,8,7,9,6,1,2,4,5)]))
+levels(enetSummary17$niceNames)
 
 
 trans17enetPlot <- ggplot(enetSummary17, aes(y = niceNames, x = meancoef)) +
   geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
   geom_point(size = 3) +
   geom_vline(linetype = "longdash", xintercept = 0) +
-  xlab("Coefficient estimate") + ylab("Covariate") + 
+  xlab("Coefficient estimate") +
+  scale_y_discrete(labels = NULL, name = NULL) +
   theme_bw() + 
   theme(axis.line = element_line(colour = "black"),
         text = element_text(size = 12),
@@ -420,9 +448,6 @@ transleave17plot <- ggplot(transVCPdata, aes(y = jitter(test_plant_infection, am
   geom_point(size = 3) +
   geom_smooth(method = "lm", se = FALSE, colour = "black") +
   xlab("Leaving rate from test plant") + 
-  # scale_x_continuous(name = "Leaving rate from test plant",
-  #                    limits = c(0,1),
-  #                    breaks = seq(0,1,0.25)) +
   scale_y_continuous(name = "Probability of transmission",
                      limits = c(-0.1,1.1),
                      breaks = seq(0,1,0.25)) +
@@ -445,12 +470,13 @@ ggsave(filename = "results/figures/2017_figures/transmission_mu2_2017_scatter_pl
 #### Combining Elastic Net results from 2016 and 2017 into multi-panel figure
 
 enfigure <- plot_grid(trans16enetPlot, trans17enetPlot,
-                      align = "v", ncol = 1, nrow = 2, labels = "AUTO", label_size = 14)
+                      ncol = 2, nrow = 1, rel_widths = c(2,1),
+                      labels = "auto", label_size = 14, label_x = 0.1, label_y = 0.98)
 enfigure
 
 ggsave(filename = "results/figures/elastic_net_coefficients_both_years_plots.tiff",
        plot = enfigure,
-       width = 15, height = 15, units = "cm", dpi = 300, compression = "lzw")
+       width = 20, height = 10, units = "cm", dpi = 300, compression = "lzw")
 
 
 

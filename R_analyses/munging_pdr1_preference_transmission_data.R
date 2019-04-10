@@ -108,7 +108,8 @@ saveRDS(acqDataVector, file = "output/pdr1_2016_vector_acquisition_dataset.rds")
 acqDataCage <- acqDataVector %>% group_by(week, trt, rep) %>% summarise(cagecfu = mean(vectorcfu, na.rm = TRUE),
                                                                         sdcfu = sd(vectorcfu, na.rm = TRUE),
                                                                         logCagecfu = mean(log10(vectorcfu + 1), na.rm = TRUE),
-                                                                        propVectorInfectious = sum(vectorInfectious)/length(vectorInfectious[!is.na(vectorInfectious)]))
+                                                                        totalVectorInfectious = sum(vectorInfectious, na.rm = TRUE),
+                                                                        propVectorInfectious = totalVectorInfectious/length(vectorInfectious[!is.na(vectorInfectious)]))
 print.data.frame(acqDataCage)
 
 ## Merge acquisition data at cage level with transmission-preference data set
