@@ -3,7 +3,7 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googlesheets",
-                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "cowplot")
+                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "cowplot", "broom")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -60,6 +60,7 @@ summary(sourcexfNB)
 sourcexfQP <- glm(source.cfu.per.g ~ week*trt, data = transdata, family = "quasipoisson")
 plot(sourcexfQP)
 summary(sourcexfQP)
+tidy(sourcexfQP, conf.int = TRUE)
 ## Even though the error variance is highly skewed, the results make sense
 
 
@@ -131,7 +132,7 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
   geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(3,12)) + 
-  scale_y_continuous(name = "Mean Xylella population (log10, CFU/mL)",
+  scale_y_continuous(name = "Mean Xylella population (log10, CFU/g)",
                      breaks = seq(2,10,by=2), limits = c(2,10)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=8) +
@@ -531,7 +532,8 @@ anova(pdMod1)
 summary(pdMod1)
 ## Analysis of PD symptoms using Partial Odds Logistic Regression
 transVCPdata$PD_symptoms_index <- factor(transVCPdata$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
-olrMod <- polr(PD_symptoms_index ~ week*genotype, data = transVCPdata, Hess = TRUE, method = "logistic")
+pdData <- transVCPdata %>% dplyr::select(PD_symptoms_index, block, week, genotype) %>% dplyr::filter(complete.cases(.))
+olrMod <- polr(PD_symptoms_index ~ week + genotype, data = pdData, Hess = TRUE, method = "logistic")
 summary(olrMod)
 # Calculate p values from t statistic
 olrCoefs <- coef(summary(olrMod))
@@ -540,9 +542,9 @@ p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 ## Analysis of PD symptoms using Partial Odds Logistic Regression with lrm function
-dd <- datadist(transVCPdata)
+dd <- datadist(pdData)
 options(datadist = "dd")
-lrmMod17 <- lrm(PD_symptoms_index ~ block + week*genotype, data = transVCPdata)
+lrmMod17 <- lrm(PD_symptoms_index ~ block + week*genotype, data = pdData)
 lrmMod17
 summary(lrmMod17, conf.type = "simultaneous")
 
@@ -561,6 +563,7 @@ poispopMod1 <- glm(xfpop ~ block + week*genotype, data = transVCPdata, family = 
 plot(poispopMod1)
 # Residuals look about the same as lm() with sqrt()
 summary(poispopMod1)
+tidy(poispopMod1, conf.int = TRUE)
 
 ## Negative binomial GLM
 sourcexfNB <- glm.nb(xfpop ~ block + week*genotype, data = transVCPdata)
@@ -995,8 +998,8 @@ ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plo
 
 #### Plot of symptoms and xf source pops for both years
 pd_source_figure <- plot_grid(symptom16Plot, symptom17plot, sourcexf16plot, sourcexf17plot,
-                              ncol = 2, nrow = 2,
-                              labels = "auto", label_size = 10)
+                              ncol = 2, nrow = 2, hjust = -0.1,
+                              labels = c("(a)", "(b)", "(c)", "(d)"), label_size = 10)
 
 ggsave(filename = "results/figures/pd_source_both_years_figure.tiff",
        plot = pd_source_figure,
