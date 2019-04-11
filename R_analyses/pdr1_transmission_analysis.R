@@ -42,9 +42,13 @@ p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
 (olrCoefs <- cbind(olrCoefs, "p-value" = p))
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
-
-lrmMod <- lrm(pd_index ~ week*trt, data = transdata)
-lrmMod
+#### Partial odds ordinal logistic regression using rms::lrm function
+transdataDD <- transdata %>% dplyr::select(pd_index, week, trt)
+dd <- datadist(transdataDD)
+options(datadist = "dd")
+lrmMod16 <- lrm(pd_index ~ week*trt, data = transdataDD)
+lrmMod16
+summary(lrmMod16, conf.type = "simultaneous")
 
 #############################################################################################################
 #### source xf pop
@@ -61,10 +65,12 @@ summary(sourcexfQP)
 
 #######################################################################################################
 #### Plotting
-transSummary <- transdata %>% group_by(., week, trt) %>% 
-  summarise(percInfected = 100*sum(test.plant.infection, na.rm = TRUE)/sum(!is.na(test.plant.infection)),
-            meanPD = mean(pd_index, na.rm = TRUE),
-            sePD = sd(pd_index, na.rm = TRUE)/sqrt(sum(!is.na(pd_index))),
+transSummary <- transdata %>% 
+  mutate(pd_index_num = factor2numeric(pd_index)) %>%
+  group_by(., week, trt) %>% 
+  summarise(propInfected = sum(test.plant.infection, na.rm = TRUE)/sum(!is.na(test.plant.infection)),
+            meanPD = mean(pd_index_num, na.rm = TRUE),
+            sePD = sd(pd_index_num, na.rm = TRUE)/sqrt(sum(!is.na(pd_index_num))),
             meancfu = mean(log10(source.cfu.per.g+1)),
             secfu = sd(log10(source.cfu.per.g+1))/sqrt(sum(!is.na(source.cfu.per.g))))
 
@@ -96,54 +102,48 @@ ggsave("results/figures/transmission_line_plot.jpg", plot = transplot,
 
 
 #### Symptoms plot
-symptomPlot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
+symptom16Plot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
   geom_line(aes(linetype=trt), size=1.25) +
   geom_point(aes(shape=trt), size=2.5) +
   geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Mean PD symptoms index") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
+                     breaks = c(3,8,12), limits = c(3,12)) + 
+  scale_y_continuous(name = "Mean PD symptom severity index",
+                     breaks = seq(0,5,by=1), limits = c(0, 5)) +
+  scale_shape_manual(values = c(16,1)) +
+  theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        legend.position = "none") 
 
-symptomPlot
-ggsave("results/figures/pd_symptom_line_plot.jpg", plot = symptomPlot,
+symptom16Plot
+ggsave("results/figures/pd_symptom_line_plot.jpg", plot = symptom16Plot,
        width = 7, height = 7, units = "in")
 
 
 #### Xf pops in source plant plot
-sourcexfplot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
+sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
   geom_line(aes(linetype=trt), size=1.25) +
   geom_point(aes(shape=trt), size=2.5) +
   geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Xylella CFU/g plant tissue (log10)") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
+                     breaks = c(3,8,12), limits = c(3,12)) + 
+  scale_y_continuous(name = "Mean Xylella population (log10, CFU/mL)",
+                     breaks = seq(2,10,by=2), limits = c(2,10)) +
+  scale_shape_manual(values = c(16,1)) +
+  theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        legend.position = "none") 
 
-sourcexfplot
-ggsave("results/figures/source_xf_line_plot_log.jpg", plot = sourcexfplot,
+sourcexf16plot
+ggsave("results/figures/source_xf_line_plot_log.jpg", plot = sourcexf16plot,
        width = 7, height = 7, units = "in")
 
 
@@ -531,7 +531,7 @@ anova(pdMod1)
 summary(pdMod1)
 ## Analysis of PD symptoms using Partial Odds Logistic Regression
 transVCPdata$PD_symptoms_index <- factor(transVCPdata$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
-olrMod <- polr(PD_symptoms_index ~ week + genotype, data = transVCPdata, Hess = TRUE, method = "logistic")
+olrMod <- polr(PD_symptoms_index ~ week*genotype, data = transVCPdata, Hess = TRUE, method = "logistic")
 summary(olrMod)
 # Calculate p values from t statistic
 olrCoefs <- coef(summary(olrMod))
@@ -540,9 +540,11 @@ p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 ## Analysis of PD symptoms using Partial Odds Logistic Regression with lrm function
+dd <- datadist(transVCPdata)
+options(datadist = "dd")
 lrmMod17 <- lrm(PD_symptoms_index ~ block + week*genotype, data = transVCPdata)
 lrmMod17
-
+summary(lrmMod17, conf.type = "simultaneous")
 
 ##############################################################################################################
 #### Analysis of Xf pops in source plants
@@ -576,59 +578,70 @@ summary(sourcexfNB)
 #### Plotting PD symptoms
 ## Summary
 pdSummary <- transVCPdata %>% group_by(week, genotype, trt) %>% 
-  summarise(meanPD = mean(PD_symptoms_index, na.rm = TRUE), 
-            sePD = sd(PD_symptoms_index, na.rm = TRUE)/sqrt(sum(!is.na(PD_symptoms_index))))
+  mutate(pd_index_num = factor2numeric(PD_symptoms_index)) %>%
+  summarise(meanPD = mean(pd_index_num, na.rm = TRUE), 
+            sePD = sd(pd_index_num, na.rm = TRUE)/sqrt(sum(!is.na(pd_index_num))))
 
 ## PD symptoms plot
-PDplot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
-  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
-  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
+symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
+  geom_line(aes(linetype=genotype), colour = "black", size=1.25) +
+  geom_point(aes(shape=genotype), colour = "black", size=2.5) +
   geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Mean PD symptom index",
+                     breaks = c(2,5,8,14), limits = c(2,14)) + 
+  scale_y_continuous(name = "",
                      limits = c(0,5)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
+  # 007 = open circles, dashed line
+  # 092 = open triangles, dashed line
+  # 094 = closed circles, solid line
+  # 102 = closed triangles, solid line
+  scale_shape_manual(values = c(1,2,16,17)) +
+  scale_linetype_manual(values = c(2,2,1,1)) +
+  theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        legend.position = "none") 
 
-PDplot
-ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = PDplot,
+symptom17plot
+ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = symptom17plot,
        width = 7, height = 7, units = "in")
 
 
 #### Plotting source plant xf populations
 ## Summary
-sourceSummary <- sourcedata2 %>% mutate(logxfpop = log10(xfpop+1), sqrtxfpop = sqrt(xfpop)) %>% 
+sourceSummary <- transVCPdata %>% 
+  dplyr::filter(!is.na(xfpop)) %>%
+  mutate(logxfpop = log10(xfpop+1), sqrtxfpop = sqrt(xfpop)) %>% 
   group_by(week, genotype, trt) %>% 
-  summarise_at(c("logxfpop", "sqrtxfpop"), funs(mean = mean(.), n = sum(!is.na(.)), se = sd(.)/sqrt(sum(!is.na(.)))))
+  summarise_at(c("logxfpop", "sqrtxfpop"), list(mean = ~mean(.), n = ~sum(.), se = ~sd(.)/sqrt(length(.))))
 
 ## Xf pops in source plant plot
-sourcexfplot <- ggplot(data=sourceSummary, aes(x=week, y=sqrtxfpop_mean)) +
-  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
-  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
-  geom_errorbar(aes(ymax=sqrtxfpop_mean+sqrtxfpop_se, ymin=sqrtxfpop_mean-sqrtxfpop_se), width=0.2) +
+sourcexf17plot <- ggplot(data=sourceSummary, aes(x=week, y=logxfpop_mean)) +
+  geom_line(aes(linetype=genotype), colour = "black", size=1.25) +
+  geom_point(aes(shape=genotype), colour = "black", size=2.5) +
+  geom_errorbar(aes(ymax=logxfpop_mean+logxfpop_se, ymin=logxfpop_mean-logxfpop_se), width=0.2) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Xylella populations in source plant (square root)") +
-  # limits = c(0,10)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
+                     breaks = c(2,5,8,14), limits = c(2,14)) + 
+  scale_y_continuous(name = "",
+                     breaks = seq(2,10,by=2), limits = c(2,10)) +
+  # 007 = open circles, dashed line
+  # 092 = open triangles, dashed line
+  # 094 = closed circles, solid line
+  # 102 = closed triangles, solid line
+  scale_shape_manual(values = c(1,2,16,17)) +
+  scale_linetype_manual(values = c(2,2,1,1)) +
+  theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        legend.position = "none") 
 
-sourcexfplot
+sourcexf17plot
 
 ggsave("results/figures/2017_figures/source_xf_sqrt_line_plot_2017.jpg", plot = sourcexfplot,
        width = 7, height = 7, units = "in")
@@ -976,6 +989,20 @@ ggsave("results/figures/2017_figures/transmission_non-linear_plot_2017.jpg", plo
 
 
 ##############################################################################
+##############################################################################
+#### Combining figures for paper
+##############################################################################
+
+#### Plot of symptoms and xf source pops for both years
+pd_source_figure <- plot_grid(symptom16Plot, symptom17plot, sourcexf16plot, sourcexf17plot,
+                              ncol = 2, nrow = 2,
+                              labels = "auto", label_size = 10)
+
+ggsave(filename = "results/figures/pd_source_both_years_figure.tiff",
+       plot = pd_source_figure,
+       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
+
+##############################################################################
 #### Combining NL transmission results for paper 
 
 #### Plot transmission dynamics plots for both years as multi-panel figure
@@ -983,7 +1010,7 @@ nl_trans_figure <- plot_grid(transplotNL16, transplotNL17,
                              align = "h", ncol = 2, nrow = 1, 
                              labels = "auto", label_x = 0.17, label_y = 0.98,
                              label_size = 10)
-#fig2
+
 ggsave(filename = "results/figures/nl_transmission_figure.tiff",
        plot = nl_trans_figure,
        width = 14, height = 7, units = "cm", dpi = 300, compression = "lzw")
