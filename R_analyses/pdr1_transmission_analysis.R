@@ -304,43 +304,43 @@ b.mm0 <- 4 # value of x when y = a/2
 #### Fitting multiple non-linear models to Resistant and Susceptible trts separately
 
 # Get data sets
-vectorR <- transdata %>% dplyr::filter(trt == "R" & !is.na(totalVectorInfectious)) %>% rename(totalInfectious = totalVectorInfectious)
-vectorS <- transdata %>% dplyr::filter(trt == "S" & !is.na(totalVectorInfectious)) %>% rename(totalInfectious = totalVectorInfectious)
+vectorR <- acqDataVector %>% dplyr::filter(trt == "R" & !is.na(vectorInfectious)) %>% rename(nInfected = vectorInfectious)
+vectorS <- acqDataVector %>% dplyr::filter(trt == "S" & !is.na(vectorInfectious)) %>% rename(nInfected = vectorInfectious)
 
 #### Fitting resistant line data
-vectorRresults16 <- optimizeVectorModels(vectorR)
+vectorRresults16 <- optimizeTransModels(vectorR, nbugs = 1)
 (modelSelectR16 <- vectorRresults16[[2]])
 opListR <- vectorRresults16[[1]]
 
 # Get model predictions for plotting
-bestModR <- opListR$rickerOp # Ricker model is the best
+bestModR <- opListR$holling4Op # Holling 4 model is the best
 bestcoefR <- as.list(coef(bestModR))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
-ciR16 <- confint(bestModR)
+ciR16 <- confint(bestModR, method = "quad")
 paramR16 <- data.frame(dataset = "R16",
-                       model = "Ricker",
+                       model = "Holling_type_IV",
                        coef = names(coef(bestModR)),
                        estimate = coef(bestModR),
-                       cil = ciR16[,1],
-                       ciu = ciR16[,2])
+                       cil = coef(bestModR) - seR17*1.96,
+                       ciu = coef(bestModR) + seR17*1.96)
 
 newDatR <- data.frame(week = seq(0, 12, length = 101))
-newDatR$totalInfectious <- with(newDatR, bestcoefR$a*week*exp(-bestcoefR$b*week))
+newDatR$nInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 
 #### Fitting susceptible line data
-vectorSresults16 <- optimizeVectorModels(vectorS)
+vectorSresults16 <- optimizeTransModels(vectorS, nbugs = 1)
 (modelSelectS16 <- vectorSresults16[[2]])
 opListS <- vectorSresults16[[1]]
 
 # Get model predictions for plotting
 # Multiple models are equivalently good, MM seems the most realistic and lowest AIC
-bestModS <- opListS$MMOp # Ricker model is the best
+bestModS <- opListS$holling4Op # Ricker model is the best
 bestcoefS <- as.list(coef(bestModS))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
-ciS16 <- confint(bestModS)
+ciS16 <- confint(bestModS, method = "quad")
 paramS16 <- data.frame(dataset = "S16",
                        model = "Michaelis_Menten",
                        coef = names(coef(bestModS)),
@@ -349,19 +349,19 @@ paramS16 <- data.frame(dataset = "S16",
                        ciu = ciS16[,2])
 
 newDatS <- data.frame(week = seq(0, 12, length = 101))
-newDatS$totalInfectious <- with(newDatS, ((bestcoefS$a*week)/(bestcoefS$b + week)))
+newDatS$nInfected <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
 
 
 #### Plotting results
 ## Calculate mean infectiousness for each trt and week
-vectorSummary16 <- transdata %>% dplyr::filter(!is.na(totalVectorInfectious)) %>% 
-  group_by(week, trt) %>% summarise(meanTotalInfectious = mean(totalVectorInfectious, na.rm = TRUE),
-                                    nTotalInfectious = length(totalVectorInfectious),
-                                    seTotalInfectious = sd(totalVectorInfectious, na.rm = TRUE)/sqrt(nTotalInfectious)) 
+vectorSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
+  group_by(week, trt, rep) %>% summarise(propInfectious = sum(vectorInfectious)/length(vectorInfectious)) %>%
+  group_by(week, trt) %>% summarise(meanPropInfectious = mean(propInfectious),
+                                    nPropInfectious = length(propInfectious),
+                                    sePropInfectious = sd(propInfectious)/sqrt(nPropInfectious)) 
 vectorSummary16
 
 # Plot S and R genotypes summarised together
-# Use Holling 4 model for S and for R
 # Vector acquisition plot
 vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanTotalInfectious)) +
   # R = Closed circles and solid line
@@ -483,7 +483,6 @@ newDatS$propInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
 #### Plotting results
 # Plot S and R genotypes summarised together
-# Use Ricker model for S and Holling 4 model for R
 # Transmission plot
 transplotNL16 <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
   # R = Circles and solid line
