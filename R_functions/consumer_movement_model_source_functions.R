@@ -261,6 +261,7 @@ optimizeCMM <- function(dat = dat, lowerConstraint = 0.0001, upperConstraint = 1
 
 #### Function to extract Hessian matrix of best model and look at inter-parameter correlations
 getParCorrelations <- function(resultsList = resultsList){
+  require(dplyr)
   # resultsList is a list of optimx model fits and model selection, returned from optimizeCMM()
   op.list <- resultsList$op.list
   modelSelect <- resultsList$modelSelect
@@ -270,9 +271,9 @@ getParCorrelations <- function(resultsList = resultsList){
   # Extract parameter estimates into a vector
   bestParams <- bestModelFit[,grep("p", names(bestModelFit))] %>% as.numeric()
   # Extract NLL function from NLLlist, which has the same names as modelSelect and op.list
-  nllFunction <- NLLlist[[which(names(NLLlist) == bestModelName)]]
-  # Use hessian() from numDeriv package because the Hessian returned by optimx() a weird list object
-  Hessian <- hessian(func = nllFunction, x = bestParams)
+  #nllFunction <- NLLlist[[which(names(NLLlist) == bestModelName)]]
+  Hessian <- attr(bestModelFit, "details")["spg", "nhatend"][[1]]
+  #Hessian <- hessian(func = nllFunction, x = bestParams)
   # Calculate variance-covariance matrix
   vcovMatrix <- Hessian %>% solve()
   # Calculate correlation matrix; should have 1's along diagonal
@@ -315,55 +316,70 @@ extractCorrelationMatrix <- function(corrMatrixList){
 # Method can only be used if MLE is close to global maximum.
 
 mleTable <- function(resultsList = resultsList){
+  require(optimx); require(tidyr); require(dplyr)
   # resultsList is a list of optimx model fits and model selection, returned from optimizeCMM()
-  op.list <- resultsList$op.list
+  opList <- resultsList$op.list
   modelSelect <- resultsList$modelSelect
   # Select all models included in selection procedure
-  models <- modelSelect[, "model"]
-  opList <- lapply(models, function(x) op.list[[which(names(op.list) == x)]])
-  names(opList) <- models
+  # models <- modelSelect[, "model"]
+  # opList <- lapply(models, function(x) op.list[[which(names(op.list) == x)]])
+  # names(opList) <- models
   extractFromList <- function(x){
     # p is a vector of estimates for each parameter of the full model
-    # var is the variance extracted from the Hessian/obvserved information matrix
+    # hess is the Hessian matrix extracted from the optimx object
+    # var is the variance calculated from the Hessian/obvserved information matrix
     # varfull is a vector of the variances for each parameter in the full model
     model <- opList[[x]]
     model.name <- names(opList)[x]
     if(model.name == "fixed") {
-        p <- as.numeric(model[,c("p1","p1","p2","p2")]) 
-        var <- tryCatch(diag(solve(hessian(func = NLLlist$fixed, x = as.numeric(model[,grep("p",names(model))])))), 
+        p <- as.numeric(model[,c("p1","p1","p2","p2")])
+        hess <- attr(model, "details")["spg", "nhatend"][[1]]
+        var <- tryCatch(diag(solve(hess)), 
                         error = function(e) c(-99, -99))
         varfull <- c(var[1], var[1], var[2], var[2])
+        if(any(var < 0)){
+          warning("negative variance calculated, starting browser")
+          browser()
+        }
     } else {
         if(model.name == "p.choice") {
             p <- as.numeric(model[,c("p1","p2","p3","p3")]) 
-            # var <- hessian(func = NLLlist$p.choice, x = as.numeric(model[,grep("p",names(model))])) %>% 
-            #   solve() %>% diag() 
-            var <- tryCatch(diag(solve(hessian(func = NLLlist$p.choice, x = as.numeric(model[,grep("p",names(model))])))), 
+            hess <- attr(model, "details")["spg", "nhatend"][[1]]
+            var <- tryCatch(diag(solve(hess)), 
                             error = function(e) c(-99, -99, -99))
             varfull <- c(var[1], var[2], var[3], var[3])
+            if(any(var < 0)){
+              warning("negative variance calculated, starting browser")
+              browser()
+            }
         } else {
             if(model.name == "mu.choice") {
                 p <- as.numeric(model[,c("p1","p1","p2","p3")]) 
-                # var <- hessian(func = NLLlist$mu.choice, x = as.numeric(model[,grep("p",names(model))])) %>%
-                #   solve() %>% diag() 
-                var <- tryCatch(diag(solve(hessian(func = NLLlist$mu.choice, x = as.numeric(model[,grep("p",names(model))])))), 
+                hess <- attr(model, "details")["spg", "nhatend"][[1]]
+                var <- tryCatch(diag(solve(hess)), 
                                 error = function(e) c(-99, -99, -99))
                 varfull <- c(var[1], var[1], var[2], var[3])
+                if(any(var < 0)){
+                  warning("negative variance calculated, starting browser")
+                  browser()
+                }
             } else {
                 p <- as.numeric(model[,c("p1","p2","p3","p4")]) # Estimates for Free Choice Model
-                # var <- hessian(func = NLLlist$choice, x = as.numeric(model[,grep("p",names(model))])) %>% 
-                #   solve() %>% diag()            
-                var <- tryCatch(diag(solve(hessian(func = NLLlist$choice, x = as.numeric(model[,grep("p",names(model))])))), 
+                hess <- attr(model, "details")["spg", "nhatend"][[1]]
+                var <- tryCatch(diag(solve(hess)), 
                                 error = function(e) c(-99, -99, -99, -99))
                 varfull <- c(var[1], var[2], var[3], var[4])
+                if(any(var < 0)){
+                  warning("negative variance calculated, starting browser")
+                  browser()
+                }
             }}}
     NLL <- model$value # Negative Log Likelihood estimate
     return(c(model.name, p, varfull, NLL))
   }
   moddat <- as.data.frame(t(sapply(1:length(opList), extractFromList, simplify = TRUE)))
   names(moddat) <- c("model", "p1", "p2", "mu1", "mu2", "p1var", "p2var", "mu1var", "mu2var", "NLL")
-  moddat$AICc <- modelSelect$AICc
-  moddat$dAICc <- modelSelect$dAICc
+  moddat <- moddat %>% left_join(., modelSelect, by = "model") %>% arrange(dAICc)
   # Convert factor variables to numeric variables
   moddat$model <- as.character(moddat$model)
   factors <- which(sapply(1:ncol(moddat), function(x) is.factor(moddat[,x]), simplify = TRUE))

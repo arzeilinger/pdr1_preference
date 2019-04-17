@@ -379,6 +379,7 @@ cmmData$week.genotype <- factor(paste(cmmData$week, cmmData$genotype, sep = "-")
 data_5_102 <- dplyr::filter(cmmData, week == 5, genotype == "102") 
 data_14_102 <- dplyr::filter(cmmData, week == 14, genotype == "102") 
 data_14_094 <- dplyr::filter(cmmData, week == 14, genotype == "094") 
+data_14_092 <- dplyr::filter(cmmData, week == 14, genotype == "092") 
 
 # Max N for any row of cmmData is 8*8 = 64
 # Any rows of cmmData have more than N = 64 BGSS?
@@ -396,12 +397,6 @@ modelFits <- readRDS("output/CMM_optimx_model_selection_output_2017.rds")
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
 names(matrices) <- levels(cmmData$week.genotype)
-## Some errors occurred calculating correlation matrices, look into them
-mat14 <- matrices[[14]]
-op14 <- modelFits[[14]]
-op14fixed <- op14$op.list$fixed
-hess14 <- hessian(func = NLLlist$fixed, x = as.numeric(op14fixed[,grep("p",names(op14fixed))]))
-vcov14 <- hess14 %>% solve()
 # Calculate correlation matrix; should have 1's along diagonal
 cor14 <- vcov14 %>% cov2cor()
 
@@ -411,16 +406,6 @@ saveRDS(matrices, file = "output/cmm_parameter_correlation_matrices_2017.rds")
 #### Extract and organize parameter estimates from all models
 paramResults <- lapply(modelFits, mleTable)
 names(paramResults) <- levels(cmmData$week.genotype)
-
-
-## Some variances are negative, need to figure out why
-exop <- modelFits[[14]]$op.list$fixed
-exhess <- hessian(func = NLLlist$fixed, x = as.numeric(exop[,grep("p",names(exop))]))
-diag(solve(exhess))
-
-exop2 <- modelFits[[14]]$op.list$mu.choice
-exhess2 <- hessian(func = NLLlist$mu.choice, x = as.numeric(exop2[,grep("p",names(exop2))]))
-diag(solve(exhess2))
 
 
 #### Average results for all good models
@@ -439,7 +424,7 @@ paramData$variance <- factor2numeric(paramData$variance)
 # Comment on ResearchGate forum (https://www.researchgate.net/post/In_R_how_to_estimate_confidence_intervals_from_the_Hessian_matrix) suggested taking absolute value of of variances
 # Do this for now, but probably need to bootstrap/jackknife
 # Also need to re-think model averaging of parameter estimates overall
-paramData$se <- sqrt(abs(paramData$variance))
+paramData$se <- sqrt(paramData$variance)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
 
@@ -526,7 +511,7 @@ write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv",
 plotPars <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2017.csv", header = TRUE)
 
 # Prepend zeroes to genotype labels and make a factor
-plotPars$genotype <- plotPars$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
+#plotPars$genotype <- plotPars$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
 
 # Color palette
 my_palette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
