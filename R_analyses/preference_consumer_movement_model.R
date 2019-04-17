@@ -10,7 +10,7 @@ rm(list = ls())
 # loading dtplyr that replaces dplyr and data.table
 my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "data.table",
                  "lattice", "optimx", "bbmle", "numDeriv", "stringr",
-                 "googlesheets", "RColorBrewer")
+                 "googlesheets", "RColorBrewer", "cowplot")
 lapply(my.packages, require, character.only = TRUE)
 
 ## Input functions for P1 and P2 equations, 
@@ -51,7 +51,8 @@ dplyr::filter(s3prefdata, time_from_start_hr == 1 | time_from_start_hr == 2)
 # n2 = test plant
 # n3 = neutral space
 
-cmmData <- prefdata %>% group_by(week, trt, time_from_start_hr) %>% 
+cmmData <- prefdata %>% dplyr::filter(week != 12.2) %>%
+  group_by(week, trt, time_from_start_hr) %>% 
   summarise(n1 = sum(source_plant),
             n2 = sum(test_plant),
             n3 = sum(neutral_space)) %>%
@@ -67,9 +68,9 @@ dplyr::filter(cmmData, week == 3)
 #### Fit models to each of the trt-week combinations
 modelFits <- lapply(levels(cmmData$week.trt), function(x) optimizeCMM(dat = cmmData[cmmData$week.trt == x,], upperConstraint = 64, aiccN = 8))
 names(modelFits) <- levels(cmmData$week.trt)
-saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output.rds")
+saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output_2016.rds")
 
-modelFits <- readRDS("output/CMM_optimx_model_selection_output.rds")
+modelFits <- readRDS("output/CMM_optimx_model_selection_output_2016.rds")
 
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
@@ -105,32 +106,31 @@ testpardat
 
 #####################################################################################
 #### Plotting rate parameters
+#### Plotting rate parameters
 # Structure data.frame for plotting
-plotPars <- dplyr::filter(paramData, week.trt != "12.2R" & week.trt != "12.2S") # Remove second 12-week trials
-# Split week.trt into week and trt columns
-plotPars$week <- plotPars$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric() 
-plotPars$trt <- plotPars$week.trt %>% str_extract(., "[aA-zZ]+")
+plotPars16 <- paramData
 # Split parameter into rate and choice columns, and replace values with more meaningful terms
-plotPars$rate <- plotPars$parameter %>% str_extract(., "[aA-zZ]+") %>% 
+plotPars16$rate <- plotPars16$parameter %>% str_extract(., "[aA-zZ]+") %>% 
   gsub("p", "attraction", ., fixed = TRUE) %>% 
   gsub("mu", "leaving", ., fixed = TRUE)
-plotPars$choice <- plotPars$parameter %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
+plotPars16$choice <- plotPars16$parameter %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
   gsub(1, "infected", ., fixed = TRUE) %>%
-  gsub(2, "Xf-free", ., fixed = TRUE)
-plotPars$latticegroups <- with(plotPars, paste(trt, choice, sep=" ")) %>% factor()
-plotPars
+  gsub(2, "Xf-free", ., fixed = TRUE) %>% factor()
+plotPars16$week <- plotPars16$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric()
+plotPars16$trt <- plotPars16$week.trt %>% str_extract(., "[aA-zZ]+") %>% factor()
+plotPars16
 
-write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates.csv", row.names = FALSE)
+write.csv(plotPars16, file = "results/pdr1_cmm_rate_parameter_estimates_2016.csv", row.names = FALSE)
 
-# Create dummy x variable to space out points
-adj <- c(-0.5, -0.25, 0.25, 0.5)
-plotPars$dummyx <- 0
-for(i in 1:length(levels(plotPars$latticegroups))){
-  group.i <- levels(plotPars$latticegroups)[i]
-  data.i <- which(plotPars$latticegroups == group.i)
-  adj.i <- adj[i]
-  plotPars$dummyx[data.i] <- plotPars[plotPars$latticegroups == group.i,"week"] + adj.i
-}
+# # Create dummy x variable to space out points
+# adj <- c(-0.5, -0.25, 0.25, 0.5)
+# plotPars$dummyx <- 0
+# for(i in 1:length(levels(plotPars$latticegroups))){
+#   group.i <- levels(plotPars$latticegroups)[i]
+#   data.i <- which(plotPars$latticegroups == group.i)
+#   adj.i <- adj[i]
+#   plotPars$dummyx[data.i] <- plotPars[plotPars$latticegroups == group.i,"week"] + adj.i
+# }
 
 
 # Rate parameter plots together
@@ -138,42 +138,70 @@ for(i in 1:length(levels(plotPars$latticegroups))){
      # width = 76*2, height = 76, units = "mm", 
      # res = 600, compression = "lzw")
 #  plot.new()
-parameter_plot <-  with(plotPars,
-                        xyplot(estimate ~ dummyx|rate, groups = latticegroups,
-                               ly = cil, uy = ciu,
-                               scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free",
-                                             x = list(limits = c(0, 13), at = c(3,8,12),
-                                                      labels = list(c("","", ""), c(3,8,12))),
-                                             y = list(limits = list(c(0, 3), c(0, 0.6)),
-                                                      at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
-                                                      labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
-                               xlab = list("Weeks post-inoculation", cex = 1.2), 
-                               ylab = list(expression("Leaving rate "(hr^{-1})*"                          Attraction rate "(hr^{-1})),
-                                           cex = 1.2),
-                               layout = c(1,2), as.table = TRUE, strip = FALSE, pch = c(19, 1, 17, 2),
-                               type = 'p', cex = 1.2, col = "black", 
-                               key = list(x = 0.4, y = 0.85, corner = c(0,0),
-                                          text = list(lab = levels(latticegroups)), 
-                                          points = list(pch = c(19, 1, 17, 2), col = "black")), 
-                               prepanel = prepanel.ci,                      
-                               panel = function(x, y, ...) {                
-                                 panel.abline(v = unique(as.numeric(x)),  
-                                              col = "white")              
-                                 panel.superpose(x, y, ...)               
-                               },                                          
-                               panel.groups = panel.ci))                    
-                # ltext(165, 9, "2009", cex = 1.3)
-                # ltext(380, 9, "2010", cex = 1.3)
-                # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
-                # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+# parameter_plot <-  with(plotPars,
+#                         xyplot(estimate ~ dummyx|rate, groups = latticegroups,
+#                                ly = cil, uy = ciu,
+#                                scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free",
+#                                              x = list(limits = c(0, 13), at = c(3,8,12),
+#                                                       labels = list(c("","", ""), c(3,8,12))),
+#                                              y = list(limits = list(c(0, 3), c(0, 0.6)),
+#                                                       at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
+#                                                       labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
+#                                xlab = list("Weeks post-inoculation", cex = 1.2), 
+#                                ylab = list(expression("Leaving rate "(hr^{-1})*"                          Attraction rate "(hr^{-1})),
+#                                            cex = 1.2),
+#                                layout = c(1,2), as.table = TRUE, strip = FALSE, pch = c(19, 1, 17, 2),
+#                                type = 'p', cex = 1.2, col = "black", 
+#                                key = list(x = 0.4, y = 0.85, corner = c(0,0),
+#                                           text = list(lab = levels(latticegroups)), 
+#                                           points = list(pch = c(19, 1, 17, 2), col = "black")), 
+#                                prepanel = prepanel.ci,                      
+#                                panel = function(x, y, ...) {                
+#                                  panel.abline(v = unique(as.numeric(x)),  
+#                                               col = "white")              
+#                                  panel.superpose(x, y, ...)               
+#                                },                                          
+#                                panel.groups = panel.ci))                    
+#                 # ltext(165, 9, "2009", cex = 1.3)
+#                 # ltext(380, 9, "2010", cex = 1.3)
+#                 # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
+#                 # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
+# 
+# trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_rate_parameter_plot_test.tif")
+#   print(parameter_plot)
+# dev.off()
 
-trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_rate_parameter_plot_test.tif")
-  print(parameter_plot)
-dev.off()
+plotPars16 <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2016.csv") %>% arrange(week)
+plotPars16 <- plotPars16 %>% mutate(Trt = factor(ifelse(trt == "R", "Resistant", "Susceptible")))
+plotPars16$Trt <- with(plotPars16, factor(Trt, levels(Trt)[c(2,1)]))
 
 
+#### BW plot of CMM rates for paper
+cmmPlot16 <- ggplot(data=plotPars16, aes(x=week, y=estimate, group = choice, shape = choice)) +
+  ## Closed circles = infected source plant
+  ## Open circles = Xf-free test plant
+  geom_point(data = plotPars16, size=2, position = position_dodge(width = 0.9), colour = "black") +
+  geom_errorbar(data = plotPars16, aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9), colour = "black") +
+  facet_grid(rate~Trt, scales = "free_y") +
+  geom_hline(linetype = 2, yintercept = 0) +
+  scale_shape_manual(values = c(16,1)) +
+  scale_x_continuous(name = "", 
+                     breaks = unique(plotPars16$week)) + 
+  scale_y_continuous(name = "Rate (per hour)") +
+  #limits = c(0,10)) +
+  theme_bw(base_size=8) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        strip.background = element_blank(),
+        legend.position = "none") 
 
+cmmPlot16
 
+ggsave(file = "results/figures/2016_figures/pdr1_cmm_rate_parameter_plot_2016.jpg", plot = cmmPlot16,
+       width = 14, height = 14, units = "in")
 
 
 #####################################################################################
@@ -397,8 +425,6 @@ modelFits <- readRDS("output/CMM_optimx_model_selection_output_2017.rds")
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
 names(matrices) <- levels(cmmData$week.genotype)
-# Calculate correlation matrix; should have 1's along diagonal
-cor14 <- vcov14 %>% cov2cor()
 
 ## Save vcov and corr matrices list
 saveRDS(matrices, file = "output/cmm_parameter_correlation_matrices_2017.rds")
@@ -432,23 +458,24 @@ paramData$ciu <- with(paramData, estimate + 1.96*se)
 #####################################################################################
 #### Plotting rate parameters
 # Structure data.frame for plotting
-plotPars <- paramData
+plotPars17 <- paramData
 # Split week.trt into week and trt columns
-week.genotype.split <- tstrsplit(plotPars$week.genotype, split = "-")
-plotPars$week <- week.genotype.split[[1]] %>% as.numeric()
-plotPars$genotype <- week.genotype.split[[2]] %>% factor()
+week.genotype.split <- tstrsplit(plotPars17$week.genotype, split = "-")
+plotPars17$week <- week.genotype.split[[1]] %>% as.numeric()
+plotPars17$genotype <- week.genotype.split[[2]] %>% factor()
 # Split parameter into rate and choice columns, and replace values with more meaningful terms
-plotPars$rate <- plotPars$parameter %>% str_extract(., "[aA-zZ]+") %>% 
+plotPars17$rate <- plotPars17$parameter %>% str_extract(., "[aA-zZ]+") %>% 
   gsub("p", "attraction", ., fixed = TRUE) %>% 
   gsub("mu", "leaving", ., fixed = TRUE)
-plotPars$choice <- plotPars$parameter %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
+plotPars17$choice <- plotPars17$parameter %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
   gsub(1, "infected", ., fixed = TRUE) %>%
   gsub(2, "Xf-free", ., fixed = TRUE) %>% factor()
-plotPars$latticegroups <- with(plotPars, paste(genotype, choice, sep=" ")) %>% factor()
-plotPars <- plotPars %>% arrange(., week)
-plotPars
+plotPars17$latticegroups <- with(plotPars17, paste(genotype, choice, sep=" ")) %>% factor()
+plotPars17 <- plotPars17 %>% arrange(., week)
+str(plotPars17)
+head(plotPars17)
 
-write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv", row.names = FALSE)
+write.csv(plotPars17, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv", row.names = FALSE)
 
 # Create dummy x variable to space out points
 # adj <- c(-0.5, -0.25, 0.25, 0.5)
@@ -508,25 +535,25 @@ write.csv(plotPars, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv",
 
 
 #### Plotting using ggplot2
-plotPars <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2017.csv", header = TRUE)
+plotPars17 <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2017.csv", header = TRUE)
 
 # Prepend zeroes to genotype labels and make a factor
-#plotPars$genotype <- plotPars$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
+#plotPars17$genotype <- plotPars17$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
 
 # Color palette
 my_palette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
 my_palette = c(brewer.pal(5, "Blues")[c(4)], brewer.pal(5, "Set1")[c(3)])
 
-# Plot
-parameter_plot2 <- ggplot(data=plotPars, aes(x=week, y=estimate, group = choice, color = choice)) +
+#### Color Plot
+parameter_plot2 <- ggplot(data=plotPars17, aes(x=week, y=estimate, group = choice, color = choice)) +
   #geom_line(aes(linetype=inoc.time, colour = trt), size=1.25) +
-  geom_point(data = plotPars, size=3.5, position = position_dodge(width = 0.9)) +
-  geom_errorbar(data = plotPars, aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  geom_point(data = plotPars17, size=3.5, position = position_dodge(width = 0.9)) +
+  geom_errorbar(data = plotPars17, aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
   facet_grid(rate~genotype, scales = "free_y") +
   geom_hline(linetype = 2, yintercept = 0) +
   scale_color_manual(values = my_palette) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = unique(plotPars$week)) + 
+                     breaks = unique(plotPars17$week)) + 
   scale_y_continuous(name = "Rate (per hour)") +
                      #limits = c(0,10)) +
   theme_bw(base_size=18) +
@@ -542,6 +569,43 @@ ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_plot_2017.jpg", plo
        width = 14, height = 7, units = "in")
 
 
+#### BW plot of CMM rates for paper
+cmmPlot17 <- ggplot(data=plotPars17, aes(x=week, y=estimate, group = choice, shape = choice)) +
+  ## Closed circles = infected source plant
+  ## Open circles = Xf-free test plant
+  geom_point(data = plotPars17, size=2, position = position_dodge(width = 0.9), colour = "black") +
+  geom_errorbar(data = plotPars17, aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9), colour = "black") +
+  facet_grid(rate~genotype, scales = "free_y") +
+  geom_hline(linetype = 2, yintercept = 0) +
+  scale_shape_manual(values = c(16,1)) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = unique(plotPars17$week)) + 
+  scale_y_continuous(name = "Rate (per hour)") +
+  #limits = c(0,10)) +
+  theme_bw(base_size=8) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        strip.background = element_blank(),
+        legend.position = "none") 
+
+cmmPlot17
+
+ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_BW_plot_2017.jpg", plot = cmmPlot17,
+       width = 14, height = 7, units = "in")
+
+
+#### Saving CMM rate plots from both years
+cmm_rate_figure <- plot_grid(cmmPlot16, cmmPlot17,
+                             ncol = 1, nrow = 2,
+                             labels = c("(a)", "(b)"), label_size = 10)
+cmm_rate_figure
+
+ggsave(filename = "results/figures/cmm_rates_both_years_figure.tiff",
+       plot = cmm_rate_figure,
+       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
 
 
 #### Plot raw numbers of bugs over time
