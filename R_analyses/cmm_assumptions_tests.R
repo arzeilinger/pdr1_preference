@@ -143,8 +143,7 @@ ctable <- with(cchoiceData, table(choice1, choice2))
 corrMat16 <- readRDS("output/cmm_parameter_correlation_matrices_2016.rds")
 
 ## Drop week 12.2 trials from output list
-corrTableList <- lapply(3:length(corrMat16), function(x) extractCorrelationMatrix(corrMat16[[x]]))
-names(corrTableList) <- names(corrMat16)[3:length(corrMat16)]
+corrTableList <- lapply(corrMat16, extractCorrelationMatrix)
 
 ## Write all correlation matrices to a single Excel worksheet
 wb <- createWorkbook()
@@ -165,14 +164,15 @@ for(i in 1:length(corrTableList)){
   totals[i] <- sum(dim(cor.i)) - sum(cor.i == 1)
 }
 proplowcor <- sum(lowcor)/sum(totals)
+proplowcor
+
 
 ###############################################################################
 #### 2017 MLE correlation matrices
 
 corrMat17 <- readRDS("output/cmm_parameter_correlation_matrices_2017.rds")
 
-corrTableList17 <- lapply(1:length(corrMat17), function(x) extractCorrelationMatrix(corrMat17[[x]]))
-names(corrTableList17) <- names(corrMat17)
+corrTableList17 <- lapply(corrMat17, extractCorrelationMatrix)
 
 ## Write all correlation matrices to a single Excel worksheet
 addWorksheet(wb, sheetName = "corr_matrices_2017")
@@ -183,7 +183,7 @@ for(i in 1:length(corrTableList17)){
   writeData(wb, sheet = "corr_matrices_2017", x = names(corrTableList17)[i], startCol = 1, startRow = startRows[i])
 }
 
-saveWorkbook(wb, file = "results/cmm_assumptions_correlation_tables.xlsx")
+saveWorkbook(wb, file = "results/cmm_assumptions_correlation_tables.xlsx", overwrite = TRUE)
 
 
 #### How many correlations across week.genotype combinations are < 0.5?

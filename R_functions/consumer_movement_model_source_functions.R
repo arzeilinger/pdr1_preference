@@ -248,6 +248,7 @@ optimizeCMM <- function(dat = dat, lowerConstraint = 0.0001, upperConstraint = 1
   aic.comp <- data.frame("model" = c("fixed", "p.choice", "mu.choice", "choice"),
                          "AICc" = c(aic.fixed, aic.p.choice, aic.mu.choice, aic.choice))
   aic.comp$dAICc <- abs(min(aic.comp$AICc) - aic.comp$AICc)
+  aic.comp$df <- c(2, 3, 3, 4)
   # Sort AIC results from lowest to highest dAIC
   modelSelect <- aic.comp[order(aic.comp$dAICc),]
   resultsList <- list(op.list, modelSelect)

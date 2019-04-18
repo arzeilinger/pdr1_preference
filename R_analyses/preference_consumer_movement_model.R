@@ -72,6 +72,11 @@ saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output_2016.rds")
 
 modelFits <- readRDS("output/CMM_optimx_model_selection_output_2016.rds")
 
+#### Extract model selection tables
+selectTables16 <- lapply(1:length(modelFits), function(x) modelFits[[x]]$modelSelect)
+names(selectTables16) <- names(modelFits)
+
+
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
 ## Save vcov and corr matrices list
@@ -171,9 +176,40 @@ write.csv(plotPars16, file = "results/pdr1_cmm_rate_parameter_estimates_2016.csv
 #   print(parameter_plot)
 # dev.off()
 
+#### Load rate parameter data for plotting
 plotPars16 <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2016.csv") %>% arrange(week)
 plotPars16 <- plotPars16 %>% mutate(Trt = factor(ifelse(trt == "R", "Resistant", "Susceptible")))
 plotPars16$Trt <- with(plotPars16, factor(Trt, levels(Trt)[c(2,1)]))
+
+
+# Color palette
+my_palette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+my_palette = c(brewer.pal(5, "Blues")[c(4)], brewer.pal(5, "Set1")[c(3)])
+
+#### Color Plot
+cmmPlot16_color <- ggplot(data=plotPars16, aes(x=week, y=estimate, group = choice, color = choice)) +
+  #geom_line(aes(linetype=inoc.time, colour = trt), size=1.25) +
+  geom_point(data = plotPars16, size=3.5, position = position_dodge(width = 0.9)) +
+  geom_errorbar(data = plotPars16, aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  facet_grid(rate~Trt, scales = "free_y") +
+  geom_hline(linetype = 2, yintercept = 0) +
+  scale_color_manual(values = my_palette) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = unique(plotPars17$week)) + 
+  scale_y_continuous(name = "Rate (per hour)") +
+  #limits = c(0,10)) +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        strip.background = element_blank()) 
+
+cmmPlot16_color
+
+ggsave("results/figures/2016_figures/pdr1_cmm_rate_parameter_plot_2016.jpg", plot = cmmPlot16_color,
+       width = 14, height = 7, units = "in")
 
 
 #### BW plot of CMM rates for paper
@@ -422,6 +458,10 @@ saveRDS(modelFits, file = "output/CMM_optimx_model_selection_output_2017.rds")
 
 modelFits <- readRDS("output/CMM_optimx_model_selection_output_2017.rds")
 
+#### Extract model selection tables
+selectTables17 <- lapply(1:length(modelFits), function(x) modelFits[[x]]$modelSelect)
+names(selectTables17) <- names(modelFits)
+
 #### Calculate variance-covariance and correlation matrices for each trt-week combination
 matrices <- lapply(modelFits, getParCorrelations)
 names(matrices) <- levels(cmmData$week.genotype)
@@ -561,7 +601,8 @@ parameter_plot2 <- ggplot(data=plotPars17, aes(x=week, y=estimate, group = choic
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        strip.background = element_blank()) 
 
 parameter_plot2
 
@@ -596,16 +637,6 @@ cmmPlot17
 ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_BW_plot_2017.jpg", plot = cmmPlot17,
        width = 14, height = 7, units = "in")
 
-
-#### Saving CMM rate plots from both years
-cmm_rate_figure <- plot_grid(cmmPlot16, cmmPlot17,
-                             ncol = 1, nrow = 2,
-                             labels = c("(a)", "(b)"), label_size = 10)
-cmm_rate_figure
-
-ggsave(filename = "results/figures/cmm_rates_both_years_figure.tiff",
-       plot = cmm_rate_figure,
-       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
 
 
 #### Plot raw numbers of bugs over time
@@ -710,4 +741,50 @@ saveRDS(paramDataCage, file = "output/CMM_2017_rate_parameters_per_cage.rds")
 #### Check some of the results
 check1 <- paramDataCage %>% dplyr::filter(grepl("2-2-102R", cage))
 check2 <- paramDataCage %>% dplyr::filter(grepl("14-2-007S", cage))
-                                          
+
+
+
+#####################################################################################################################
+#### Saving plots and tables for both years for paper
+
+#### Saving CMM rate plots from both years
+cmm_rate_figure <- plot_grid(cmmPlot16, cmmPlot17,
+                             ncol = 1, nrow = 2,
+                             labels = c("(a)", "(b)"), label_size = 10)
+cmm_rate_figure
+
+ggsave(filename = "results/figures/cmm_rates_both_years_figure.tiff",
+       plot = cmm_rate_figure,
+       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
+
+
+#### Saving model selection tables for both years
+
+## Make the selections tables prettier
+selectTables <- c(selectTables16, selectTables17)
+for(i in 1:length(selectTables)){
+  selectTables[[i]][,2:3] <- round(selectTables[[i]][2:3], digits = 2)
+  selectTables[[i]]$model <- with(selectTables[[i]], ifelse(model == "choice", "Free Choice",
+                                                            ifelse(model == "p.choice", "Free Attraction",
+                                                                   ifelse(model == "mu.choice", "Free Leaving",
+                                                                          "Fixed"))))
+}
+
+## Write all correlation matrices to a single Excel worksheet
+wb <- createWorkbook()
+
+#### model selection tables for both years
+addWorksheet(wb, sheetName = "selection_tables")
+startRows <- seq(2,2+6*length(selectTables),by=6)
+for(i in 1:length(selectTables)){
+  writeData(wb, sheet = "selection_tables", x = selectTables[[i]], startCol = 2, startRow = startRows[i])
+  writeData(wb, sheet = "selection_tables", x = names(selectTables)[i], startCol = 1, startRow = startRows[i])
+}
+
+saveWorkbook(wb, file = "results/cmm_model_selection_tables.xlsx", overwrite = TRUE)
+
+
+#### Comparing average movement rates between years
+## 2016 rates
+avgRates16 <- plotPars16 %>% group_by(rate) %>% summarise(mean = mean(estimate))
+avgRates17 <- plotPars17 %>% group_by(rate) %>% summarise(mean = mean(estimate))                                          
