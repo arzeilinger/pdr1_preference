@@ -280,7 +280,7 @@ ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfect
 #### Initial parameters
 ## Initial parameters for linear model
 a.l0 <- 0 # Y-intercept assumed at 0
-b.l0 <- 0.5/3 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+b.l0 <- 0.6/12 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
 
 ## Initial parameters for Holling Type IV
 a0 <- 0.1 # Asymptotic totalInfectious
@@ -289,91 +289,107 @@ b0 <- 8
 c0 <- -2
 
 ## Initial parameters for Ricker model
-a.rick0 <- 4/3 # Initial slope of the line
+a.rick0 <- 0.5/3 # Initial slope of the line
 b.rick0 <- 1/8 # x value for the peak
 
 ## Initial parameters for Logistic Growth model
-b.logist0 <- 4/3/4 # Initial slope of the line divided by 4
+b.logist0 <- 0.5/3/4 # Initial slope of the line divided by 4
 a.logist0 <- -4*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
 
 ## Initial parameters for Michaelis-Menten model
-a.mm0 <- 8 # Asymptote
+a.mm0 <- 1 # Asymptote
 b.mm0 <- 4 # value of x when y = a/2
 
 
 #### Fitting multiple non-linear models to Resistant and Susceptible trts separately
 
-# Get data sets
-vectorR <- acqDataVector %>% dplyr::filter(trt == "R" & !is.na(vectorInfectious)) %>% rename(nInfected = vectorInfectious)
-vectorS <- acqDataVector %>% dplyr::filter(trt == "S" & !is.na(vectorInfectious)) %>% rename(nInfected = vectorInfectious)
+## Summarize data by week and trt
+acqSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
+  group_by(trt, week) %>% 
+  summarise(n = length(vectorInfectious),
+            nInfected = sum(vectorInfectious),
+            propInfected = nInfected/n)
+## Split into Resistant and Sucsceptible data sets
+acqR <- acqSummary16 %>% dplyr::filter(trt == "R")
+acqS <- acqSummary16 %>% dplyr::filter(trt == "S")
 
 #### Fitting resistant line data
-vectorRresults16 <- optimizeTransModels(vectorR, nbugs = 1)
+vectorRresults16 <- optimizeTransModels(acqR, nbugs = acqR$n)
 (modelSelectR16 <- vectorRresults16[[2]])
 opListR <- vectorRresults16[[1]]
 
 # Get model predictions for plotting
-bestModR <- opListR$holling4Op # Holling 4 model is the best
+bestModR <- opListR$rickerOp # Ricker model is the best
 bestcoefR <- as.list(coef(bestModR))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
-ciR16 <- confint(bestModR, method = "quad")
-paramR16 <- data.frame(dataset = "R16",
-                       model = "Holling_type_IV",
-                       coef = names(coef(bestModR)),
-                       estimate = coef(bestModR),
-                       cil = coef(bestModR) - seR17*1.96,
-                       ciu = coef(bestModR) + seR17*1.96)
+ciR16 <- confint(bestModR)
+# hessR16 <- attr(bestModR, "details")$hessian
+# seR16 <- sqrt(diag(solve(hessR16)))
+## Using profile method 
+acqParamR16 <- data.frame(dataset = "R16",
+                          model = "Ricker",
+                          coef = names(coef(bestModR)),
+                          estimate = coef(bestModR),
+                          cil = ciR16[,1],
+                          ciu = ciR16[,2])
+                          # cil = coef(bestModR) - seR16*1.96,
+                          # ciu = coef(bestModR) + seR16*1.96)
 
 newDatR <- data.frame(week = seq(0, 12, length = 101))
-newDatR$nInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
+newDatR$nInfected <- with(newDatR, bestcoefR$a*week*exp(-bestcoefR$b*week))
+#newDatR$nInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 
 #### Fitting susceptible line data
-vectorSresults16 <- optimizeTransModels(vectorS, nbugs = 1)
+vectorSresults16 <- optimizeTransModels(acqS, nbugs = acqS$n)
 (modelSelectS16 <- vectorSresults16[[2]])
 opListS <- vectorSresults16[[1]]
 
 # Get model predictions for plotting
 # Multiple models are equivalently good, MM seems the most realistic and lowest AIC
-bestModS <- opListS$holling4Op # Ricker model is the best
+bestModS <- opListS$rickerOp # Ricker model is the best
 bestcoefS <- as.list(coef(bestModS))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
-ciS16 <- confint(bestModS, method = "quad")
-paramS16 <- data.frame(dataset = "S16",
-                       model = "Michaelis_Menten",
-                       coef = names(coef(bestModS)),
-                       estimate = coef(bestModS),
-                       cil = ciS16[,1],
-                       ciu = ciS16[,2])
+ciS16 <- confint(bestModS)
+# hessS16 <- attr(bestModS, "details")$hessian
+# seS16 <- sqrt(abs(diag(solve(hessS16))))
+## Using profile method for CI
+acqParamS16 <- data.frame(dataset = "S16",
+                          model = "Ricker",
+                          coef = names(coef(bestModS)),
+                          estimate = coef(bestModS),
+                          cil = ciS16[,1],
+                          ciu = ciS16[,2])
 
 newDatS <- data.frame(week = seq(0, 12, length = 101))
-newDatS$nInfected <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
+newDatS$nInfected <- with(newDatS, bestcoefS$a*week*exp(-bestcoefS$b*week))
+#newDatS$nInfected <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
 
 
 #### Plotting results
 ## Calculate mean infectiousness for each trt and week
 vectorSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
-  group_by(week, trt, rep) %>% summarise(propInfectious = sum(vectorInfectious)/length(vectorInfectious)) %>%
-  group_by(week, trt) %>% summarise(meanPropInfectious = mean(propInfectious),
+  group_by(trt, week, rep) %>% summarise(propInfectious = sum(vectorInfectious)/length(vectorInfectious)) %>%
+  group_by(trt, week) %>% summarise(meanPropInfectious = mean(propInfectious),
                                     nPropInfectious = length(propInfectious),
                                     sePropInfectious = sd(propInfectious)/sqrt(nPropInfectious)) 
 vectorSummary16
 
 # Plot S and R genotypes summarised together
 # Vector acquisition plot
-vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanTotalInfectious)) +
+vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfectious)) +
   # R = Closed circles and solid line
   # S = Open circles and dashed line
   geom_point(aes(shape = trt), size=2) +
-  geom_errorbar(aes(ymax=meanTotalInfectious+seTotalInfectious, ymin=meanTotalInfectious-seTotalInfectious), width=0.2) +
-  geom_smooth(data = newDatR, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatS, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  geom_errorbar(aes(ymax=meanPropInfectious+sePropInfectious, ymin=meanPropInfectious-sePropInfectious), width=0.2) +
+  geom_smooth(data = newDatR, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatS, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 2, se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Mean number of infectious vectors",
-                     limits = c(-0.2,8.2)) +
+  scale_y_continuous(name = "Proportion of infectious vectors",
+                     breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
@@ -385,7 +401,7 @@ vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanTotalInfectious
 
 vectorplotNL16
 
-ggsave("results/figures/2016_figures/acquisition_non-linear_plot_2016.jpg", plot = vectorplotNL,
+ggsave("results/figures/2016_figures/acquisition_non-linear_plot_2016.jpg", plot = vectorplotNL16,
        width = 7, height = 7, units = "in")
 
 
@@ -689,35 +705,38 @@ with(transdata2, table(week, genotype))
 #### Initial parameters
 ## Initial parameters for linear model
 a.l0 <- 0 # Y-intercept assumed at 0
-b.l0 <- 0.5/14 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
+b.l0 <- 0.5/8 # Looks like the line might hit 50% at 14 weeks, calculate initial slope from this
 
 ## Initial parameters for Holling Type IV
-a0 <- 0.1 # Asymptotic propInfected
+a0 <- 0.1 # Asymptotic totalInfectious
 # Peak transmission is at 8 weeks, peak = -2b/c, b/c = -4, and c should be < 0
 b0 <- 8
 c0 <- -2
 
 ## Initial parameters for Ricker model
-a.rick0 <- 0.25/5 # Initial slope of the line
+a.rick0 <- 0.1/2 # Initial slope of the line
 b.rick0 <- 1/8 # x value for the peak
 
 ## Initial parameters for Logistic Growth model
-b.logist0 <- 0.25/5/4 # Initial slope of the line divided by 4
-a.logist0 <- -6*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
+b.logist0 <- 0.1/2/4 # Initial slope of the line divided by 4
+a.logist0 <- -4*b.logist0 # Negative value of x at halfway to asymptote (inflection point) multiplied by b
 
 ## Initial parameters for Michaelis-Menten model
-a.mm0 <- 0.5 # Asymptote
-b.mm0 <- 6 # value of x when y = a/2
+a.mm0 <- 1 # Asymptote
+b.mm0 <- 8 # value of x when y = a/2
 
 
 #### Fitting multiple non-linear models to Resistant and Susceptible trts separately
 
 # Get data sets
-vectorR <- transdata2[transdata2$trt == "R",]
-vectorS <- transdata2[transdata2$trt == "S",]
+acqSummary17 <- transdata2 %>% group_by(trt, week) %>% summarise(n = sum(nbugs),
+                                                                 nInfected = sum(totalInfectious),
+                                                                 propInfected = nInfected/n)
+acqR <- acqSummary17 %>% dplyr::filter(trt == "R")
+acqS <- acqSummary17 %>% dplyr::filter(trt == "S")
 
 #### Fitting resistant line data
-vectorRresults17 <- optimizeVectorModels(vectorR)
+vectorRresults17 <- optimizeTransModels(acqR, nbugs = acqR$n)
 (modelSelectR17 <- vectorRresults17[[2]])
 opListR <- vectorRresults17[[1]]
 
@@ -728,21 +747,19 @@ bestcoefR <- as.list(coef(bestModR))
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
 ciR17 <- confint(bestModR, method = "quad")
 ## Profile method doesn't work, try quadratic approximation
-hessR17 <- attr(bestModR, "details")$hessian
-seR17 <- sqrt(abs(diag(solve(hessR17))))
-paramR17 <- data.frame(dataset = "R17",
+acqParamR17 <- data.frame(dataset = "R17",
                        model = "Holling_type_IV",
                        coef = names(coef(bestModR)),
                        estimate = coef(bestModR),
-                       cil = coef(bestModR) - seR17*1.96,
-                       ciu = coef(bestModR) + seR17*1.96)
+                       cil = ciR17[,1],
+                       ciu = ciR17[,2])
 
 newDatR <- data.frame(week = seq(0, 14, length = 101))
-newDatR$totalInfectious <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
+newDatR$nInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 
 #### Fitting susceptible line data
-vectorSresults17 <- optimizeVectorModels(vectorS)
+vectorSresults17 <- optimizeTransModels(acqS, nbugs = acqS$n)
 (modelSelectS17 <- vectorSresults17[[2]])
 opListS <- vectorSresults17[[1]]
 
@@ -751,40 +768,40 @@ bestModS <- opListS$holling4Op # Ricker model is the best
 bestcoefS <- as.list(coef(bestModS))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
-ciS17 <- confint(bestModS)
-paramS17 <- data.frame(dataset = "S17",
-                       model = "Holling_type_IV",
-                       coef = names(coef(bestModS)),
-                       estimate = coef(bestModS),
-                       cil = ciS17[,1],
-                       ciu = ciS17[,2])
+ciS17 <- confint(bestModS, method = "quad")
+acqParamS17 <- data.frame(dataset = "S17",
+                          model = "Holling_type_IV",
+                          coef = names(coef(bestModS)),
+                          estimate = coef(bestModS),
+                          cil = ciS17[,1],
+                          ciu = ciS17[,2])
 
 newDatS <- data.frame(week = seq(0, 14, length = 101))
-newDatS$totalInfectious <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
+newDatS$nInfected <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
 
 
 #### Plotting results
 ## Calculate mean infectiousness for each trt and week
-vectorSummary2 <- transdata2 %>% dplyr::filter(!is.na(totalInfectious)) %>% 
-  group_by(week, trt) %>% summarise(meanTotalInfectious = mean(totalInfectious, na.rm = TRUE),
-                                    nTotalInfectious = length(totalInfectious),
-                                    seTotalInfectious = sd(totalInfectious, na.rm = TRUE)/sqrt(nTotalInfectious)) 
+vectorSummary2 <- transdata2 %>% dplyr::filter(!is.na(propInfectious)) %>% 
+  group_by(trt, week) %>% summarise(meanpropInfectious = mean(propInfectious, na.rm = TRUE),
+                                    npropInfectious = length(propInfectious),
+                                    sepropInfectious = sd(propInfectious, na.rm = TRUE)/sqrt(npropInfectious)) 
 vectorSummary2
 
 # Plot S and R genotypes summarised together
 # Use Holling 4 model for S and for R
 # Vector acquisition plot
-vectorplotNL17 <- ggplot(data=vectorSummary2, aes(x=week, y=meanTotalInfectious)) +
+vectorplotNL17 <- ggplot(data=vectorSummary2, aes(x=week, y=meanpropInfectious)) +
   # R = Closed circles and solid line
   # S = Open circles and dashed line
   geom_point(aes(shape = trt), size=2) +
-  geom_errorbar(aes(ymax=meanTotalInfectious+seTotalInfectious, ymin=meanTotalInfectious-seTotalInfectious), width=0.2) +
-  geom_smooth(data = newDatR, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatS, aes(x=week, y=totalInfectious), method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  geom_errorbar(aes(ymax=meanpropInfectious+sepropInfectious, ymin=meanpropInfectious-sepropInfectious), width=0.2) +
+  geom_smooth(data = newDatR, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatS, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 2, se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "",
-                     limits = c(-0.2,8.2)) +
+                     breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=8) +
   theme(axis.line = element_line(colour = "black"),
@@ -806,7 +823,7 @@ ggsave("results/figures/2017_figures/acquisition_non-linear_plot_2017.jpg", plot
 #### Plot acquisition dynamics plots for both years as multi-panel figure
 nl_acq_figure <- plot_grid(vectorplotNL16, vectorplotNL17,
                            align = "h", ncol = 2, nrow = 1, 
-                           labels = "auto", label_x = 0.17, label_y = 0.98,
+                           labels = c("(a)", "(b)"), label_x = 0.17, label_y = 0.98,
                            label_size = 10)
 #fig?
 ggsave(filename = "results/figures/nl_acquisition_figure.tiff",
@@ -818,7 +835,15 @@ nlModelSelectionList <- list(modelSelectR16,
                              modelSelectS16,
                              modelSelectR17,
                              modelSelectS17)
-names(nlModelSelectionList) <- c("R16", "S16", "R17", "S17")
+names(nlModelSelectionList) <- c("Resistant-2016", "Susceptible-2016", "Resistant-2017", "Susceptible-2017")
+## Fix model names
+for(i in 1:length(nlModelSelectionList)){
+  nlModelSelectionList[[i]] <- with(nlModelSelectionList, ifelse(modelName == "rickerOp", "Ricker",
+                                                                 ifelse(modelName = "holling4Op", "Holling Type IV",
+                                                                        ifelse(modelName = "linearOp", "Linear",
+                                                                               ifelse(modelName = "MMOp", "Michaelis-Menten",
+                                                                                      "Logistic Growth")))))
+}
 
 ## Save parameter estimates to one sheet and all model selection tables to a second sheet of the same workbook
 wb <- createWorkbook()
@@ -830,14 +855,23 @@ for(i in 1:length(nlModelSelectionList)){
                                  AICc = round(nlModelSelectionList[[i]]$AICc, 2),
                                  dAICc = round(nlModelSelectionList[[i]]$dAICc, 2),
                                  df = nlModelSelectionList[[i]]$df)
+  modelSelectionDF[,"modelName"] <- with(modelSelectionDF, ifelse(modelName == "rickerOp", "Ricker",
+                                                                  ifelse(modelName == "holling4Op", "Holling Type IV",
+                                                                         ifelse(modelName == "linearOp", "Linear",
+                                                                                ifelse(modelName == "MMOp", "Michaelis-Menten",
+                                                                                       "Logistic Growth")))))
   writeData(wb, sheet = "nl_model_selection_tables", x = modelSelectionDF, startCol = 2, startRow = i*7)
   writeData(wb, sheet = "nl_model_selection_tables", x = names(nlModelSelectionList)[i], startCol = 1, startRow = i*7)
 }
 
 ## Parameter estimates
-nlParamTable <- rbind(paramR16, paramS16, paramR17, paramS17)
+nlParamTable <- rbind(acqParamR16, acqParamS16, acqParamR17, acqParamS17)
 nlParamTable <- nlParamTable %>% mutate(estimateCI = paste(round(estimate, 3), " [", round(cil, 3), ", ", round(ciu,3), "]", sep = "")) %>%
-  dplyr::select(-estimate, -cil, -ciu)
+  mutate("Genotype-Year" = ifelse(dataset == "R16", "Resistant-2016",
+                                  ifelse(dataset == "S16", "Susceptible-2016",
+                                         ifelse(dataset == "R17", "Resistant-2017",
+                                                "Susceptible-2017")))) %>%
+  dplyr::select(-estimate, -cil, -ciu, -dataset)
 addWorksheet(wb, sheetName = "nl_parameter_estimates")
 writeData(wb, sheet = "nl_parameter_estimates", x = nlParamTable, startCol = 2, startRow = 2)
 
@@ -1010,7 +1044,7 @@ ggsave(filename = "results/figures/pd_source_both_years_figure.tiff",
 #### Plot transmission dynamics plots for both years as multi-panel figure
 nl_trans_figure <- plot_grid(transplotNL16, transplotNL17,
                              align = "h", ncol = 2, nrow = 1, 
-                             labels = "auto", label_x = 0.17, label_y = 0.98,
+                             labels = c("(a)", "(b)"), label_x = 0.17, label_y = 0.98,
                              label_size = 10)
 
 ggsave(filename = "results/figures/nl_transmission_figure.tiff",

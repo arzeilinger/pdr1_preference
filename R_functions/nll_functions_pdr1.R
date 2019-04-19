@@ -105,9 +105,10 @@ optimizeTransModels <- function(dat, nbugs){
                    optimizer = "optim", method = "Nelder-Mead",
                    control = list(maxit = 10000))
   # Model selection using AICc
+  nObs <- ifelse(length(nbugs) > 1, max(dat$n), nbugs)
   modelSelect <- ICtab(linearOp, holling4Op, rickerOp, logisticOp, MMOp,
                        type = "AICc", sort = TRUE, delta = TRUE, base = TRUE, 
-                       nobs = nbugs)
+                       nobs = nObs)
   # Return a named list of the optimization results and the model selection
   opList <- list(linearOp, holling4Op, rickerOp, logisticOp, MMOp)
   names(opList) <- c("linearOp", "holling4Op", "rickerOp", "logisticOp", "MMOp")
