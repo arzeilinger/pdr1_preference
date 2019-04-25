@@ -463,15 +463,17 @@ ProbEqmc <- function(data, parColumn = "parameter", estColumn = "estimate", varC
   # Calculate P1* distribution and summary statistics
   P1sim <- apply(parSims, 1, function(x) P1eq.func(as.numeric(x)))
   P1median <- median(P1sim)
+  P1se <- sqrt(var(P1sim))
   P1cil <- quantile(P1sim, 0.025)
   P1ciu <- quantile(P1sim, 0.975)
-  P1res <- c("P1", P1median, P1cil, P1ciu)
+  P1res <- c("P1", P1median, P1se, P1cil, P1ciu)
   # Calculate P2* distribution and summary statistics
   P2sim <- apply(parSims, 1, function(x) P2eq.func(as.numeric(x)))
   P2median <- median(P2sim)
+  P2se <- sqrt(var(P2sim))
   P2cil <- quantile(P2sim, 0.025)
   P2ciu <- quantile(P2sim, 0.975)
-  P2res <- c("P2", P2median, P2cil, P2ciu)
+  P2res <- c("P2", P2median, P2se, P2cil, P2ciu)
   output <- as.data.frame(rbind(P1res, P2res))
   return(output)
 }

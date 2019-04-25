@@ -517,62 +517,6 @@ head(plotPars17)
 
 write.csv(plotPars17, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv", row.names = FALSE)
 
-# Create dummy x variable to space out points
-# adj <- c(-0.5, -0.25, 0.25, 0.5)
-# plotPars$dummyx <- 0
-# for(i in 1:length(levels(plotPars$latticegroups))){
-#   group.i <- levels(plotPars$latticegroups)[i]
-#   data.i <- which(plotPars$latticegroups == group.i)
-#   adj.i <- adj[i]
-#   plotPars$dummyx[data.i] <- plotPars[plotPars$latticegroups == group.i,"week"] + adj.i
-# }
-
-
-#### Lattice plot -- currently doesn't work
-# # Rate parameter plots together
-# #tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
-# # width = 76*2, height = 76, units = "mm", 
-# # res = 600, compression = "lzw")
-# #  plot.new()
-# parameter_plot <-  with(plotPars,
-#                         xyplot(estimate ~ dummyx|rate*genotype, groups = choice,
-#                                ly = cil, uy = ciu,
-#                                scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free",
-#                                              x = list(limits = c(0, 15), at = c(2,5,8,14),
-#                                                       labels = list(c("","","",""), c(2,5,8,14),
-#                                                                     c("","","",""), c(2,5,8,14),
-#                                                                     c("","","",""), c(2,5,8,14),
-#                                                                     c("","","",""), c(2,5,8,14)))),
-#                                              # y = list(limits = list(c(0, 3), c(0, 0.6)),
-#                                              #          at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
-#                                              #          labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
-#                                xlab = list("Weeks post-inoculation", cex = 1.2), 
-#                                ylab = list(expression("Leaving rate "(hr^{-1})*"                          Attraction rate "(hr^{-1})),
-#                                            cex = 1.2),
-#                                layout = c(4,2), as.table = TRUE, strip = FALSE, pch = c(19, 1),
-#                                type = 'p', cex = 1.2, col = "black", 
-#                                key = list(x = 0.4, y = 0.85, corner = c(0,0),
-#                                           text = list(lab = levels(choice)), 
-#                                           points = list(pch = c(19, 1), col = "black")), 
-#                                prepanel = prepanel.ci,                      
-#                                panel = function(x, y, ...) {                
-#                                  panel.abline(v = unique(as.numeric(x)),  
-#                                               col = "white")              
-#                                  panel.superpose(x, y, ...)               
-#                                },                                          
-#                                panel.groups = panel.ci)) 
-# parameter_plot
-# # ltext(165, 9, "2009", cex = 1.3)
-# # ltext(380, 9, "2010", cex = 1.3)
-# # mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
-# # mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
-# 
-# trellis.device(device = "tiff", file = "results/figures/2017_figures/pdr1_cmm_rate_parameter_plot_2017.tif")
-# print(parameter_plot)
-# dev.off()
-
-
-
 
 #### Plotting using ggplot2
 plotPars17 <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2017.csv", header = TRUE)
@@ -638,6 +582,72 @@ ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_BW_plot_2017.jpg", 
        width = 14, height = 7, units = "in")
 
 
+
+#####################################################################################
+#### Equilibrial probabilities 
+#####################################################################################
+
+sd <- sqrt(test$variance)
+
+p1sim <- simulateData(estimates[1], sd[1])
+p2sim <- simulateData(estimates[2], sd[2])
+mu1sim <- simulateData(estimates[3], sd[3])
+mu2sim <- simulateData(estimates[4], sd[4])
+paramSim <- cbind(p1sim, p2sim, mu1sim, mu2sim)
+
+P1eq.func(as.numeric(paramSim[50,]))
+P1eqsim <- apply(paramSim, 1, P1eq.func)
+
+# Equilibrium equations from Equation A12 in Appendix A of Zeilinger et al. (2014)
+ProbResults17 <- lapply(unique(plotPars17$week.genotype), function(x) ProbEqmc(plotPars17[plotPars17$week.genotype == x,]))
+
+# Add week.trt combination to each element of the list and combine into one data.frame
+for(i in 1:length(ProbResults17)){
+  ProbResults17[[i]]$week.genotype <- unique(plotPars17$week.genotype)[i]
+} 
+ProbResults17 <- ProbResults17 %>% rbindlist() %>% as.data.frame()
+# Restructure data set
+names(ProbResults17) <- c("state", "median", "se", "cil", "ciu", "week.genotype")
+ProbResults17$median <- factor2numeric(ProbResults17$median)
+ProbResults17$se <- factor2numeric(ProbResults17$se)
+ProbResults17$cil <- factor2numeric(ProbResults17$cil)
+ProbResults17$ciu <- factor2numeric(ProbResults17$ciu)
+
+# Add columns for weeks and treatments, and remove 12.2 week trials
+ProbResults17$week <- tstrsplit(ProbResults17$week.genotype, split = "-")[[1]] %>% as.numeric()
+ProbResults17$genotype <- tstrsplit(ProbResults17$week.genotype, split = "-")[[2]] %>% factor()
+# Split parameter into rate and choice columns, and replace values with more meaningful terms
+ProbResults17$choice <- ProbResults17$state %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
+  gsub(1, "infected", ., fixed = TRUE) %>%
+  gsub(2, "Xf-free", ., fixed = TRUE)
+ProbResults17
+str(ProbResults17)
+
+write.csv(ProbResults17, file = "results/pdr1_cmm_equilibrial_probabilities_2017.csv", row.names = FALSE)
+
+probabilitiesPlot17 <- ggplot(data=ProbResults17, aes(x=week, y=median, group = choice, color = choice)) +
+  #geom_line(aes(linetype=inoc.time, colour = trt), size=1.25) +
+  geom_point(data = ProbResults17, size=3.5, position = position_dodge(width = 0.9)) +
+  geom_errorbar(data = ProbResults17, aes(ymax=median+se, ymin=median-se), width=0.2, position = position_dodge(width = 0.9)) +
+  facet_wrap(~genotype, scales = "fixed", nrow = 1) +
+  geom_hline(linetype = 2, yintercept = 0.5) +
+  scale_color_manual(values = my_palette) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = unique(ProbResults$week)) + 
+  scale_y_continuous(name = "Probability") +
+  #limits = c(0,10)) +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        strip.background = element_blank()) 
+
+probabilitiesPlot17
+
+ggsave("results/figures/2017_figures/pdr1_eq_probabilities_plot_2017.jpg", plot = probabilitiesPlot17,
+       width = 14, height = 7, units = "in")
 
 #### Plot raw numbers of bugs over time
 plotCounts <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
