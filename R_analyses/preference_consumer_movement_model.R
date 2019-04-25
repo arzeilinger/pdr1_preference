@@ -673,11 +673,11 @@ plotCounts1 <- plotCounts %>% dplyr::filter(week == 2 & genotype == "092")
 
 bgss_counts_plot1 <- ggplot(data=plotCounts1, aes(x=time_from_start_hr, y=proportion, group = choice)) +
   geom_line(aes(colour = choice), size=1.25) +
-  #geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
-  #geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  geom_point(aes(colour = choice), size=3.5) +
   scale_color_manual(values = my_palette) +
   scale_x_continuous(name = "Time from start (hr)") + 
   scale_y_continuous(name = "Proportion of BGSS", limits = c(0,1)) +
+  scale_shape_manual(values = 1) +
   theme_bw(base_size=18) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
