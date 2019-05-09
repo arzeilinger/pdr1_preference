@@ -328,19 +328,19 @@ saveRDS(transVCPdata, file = "output/complete_2017_transmission-preference_datas
 #######################################################################################################################
 #### Join phenolic/chemistry data to transmission/acquisition/culturing/preference data
 
+#### Load transmission/acquisition/culturing/preference data set if not already loaded
+transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
 
 ## Filter phenolic data set to only Treatment == "Both" as these correspond to the xf_plants or source plants in the trials
-phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
+## Chemistry data includes phenolics and volatiles, but continue to call it "phenData"
+## Chemistry data does not include volatiles from stems because there were too many missing observations
+phenData <- readRDS("output/full_phenolic_and_volatile_data_pdr1_2017.rds")
 phenData <- phenData %>% dplyr::filter(Treatment == "Both")
 phenData$Rep <- as.numeric(phenData$Rep)
 # Make "Res" groups capitalized
 phenData$Res <- with(phenData, ifelse(Res == "r", "R", "S"))
 # Add a genotype column for merging with other data sets
 phenData$genotype <- with(phenData, ifelse(Res == "R", "094", "092"))
-
-
-#### Read in phenolic dataset
-phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
 
 
 #### Merge CMM preference parameter data set, phenolic data set, and transmission data set
@@ -350,5 +350,16 @@ phenPrefTransData <- transVCPdata %>%
 str(phenPrefTransData)
 summary(phenPrefTransData)
 
-# Save final data set
-saveRDS(phenPrefTransData, file = "output/full_phenolics_preference_transmission_dataset.rds")
+## A lot of NAs in chemical data were produced; what's going on?
+## Because genotypes 007 and 102 are still in the data set
+## Remove genotypes 007 and 102 because we never measured phenolics from them
+phenPrefTransData <- phenPrefTransData %>% dplyr::filter(genotype == "092" | genotype == "094")
+with(phenPrefTransData, table(genotype, week))
+summary(phenPrefTransData)
+
+phenPrefTransData %>% dplyr::filter(is.na(total.phenolics.stem)) %>% dplyr::select(1:5) %>% print.data.frame
+phenPrefTransData %>% dplyr::filter(is.na(total.volatiles)) %>% dplyr::select(1:5) %>% print.data.frame
+## week 2 block 1 was never measured, 3 other points missing from phenolic data and 5 others missing from volatile data
+
+## Save final data set
+saveRDS(phenPrefTransData, file = "output/chemistry_preference_transmission_dataset.rds")

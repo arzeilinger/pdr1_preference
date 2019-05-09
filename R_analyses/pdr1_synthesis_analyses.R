@@ -183,7 +183,7 @@ enetSummary16 <- enet16list[[2]]
 
 #### Plot Elastic Net results
 ## Vector of clear names for covariates
-enetSummary16$niceNames <- factor(c("Intercept", "Resistant/Susceptible cultivars", "Prop. infectious vectors",
+enetSummary16$niceNames <- factor(c("Intercept", "Resistance trait", "Proportion vectors infectious",
                                     "Xylella population size in infected plant", "PD disese severity", 
                                     "Leaving rate from infected plant", "Leaving rate from test plant",
                                     "Attraction rate from infected plant", "Attraction rate from test plant"))
@@ -386,8 +386,8 @@ enetSummary17 <- enet17list[[2]]
 
 #### Plot Elastic Net results
 ## Vector of clear names for covariates
-enetSummary17$niceNames <- factor(c("Intercept", "Resistant/Susceptible cultivars", "PD disese severity", 
-                                    "Prop. infectious vectors", "Xylella population size in infected plant", 
+enetSummary17$niceNames <- factor(c("Intercept", "Resistance trait", "PD disese severity", 
+                                    "Proportion vectors infectious", "Xylella population size in infected plant", 
                                     "Leaving rate from infected plant", "Leaving rate from test plant",
                                     "Attraction rate from infected plant", "Attraction rate from test plant"))
 levels(enetSummary17$niceNames)
@@ -470,8 +470,10 @@ ggsave(filename = "results/figures/2017_figures/transmission_mu2_2017_scatter_pl
 #### Combining Elastic Net results from 2016 and 2017 into multi-panel figure
 
 enfigure <- plot_grid(trans16enetPlot, trans17enetPlot,
-                      ncol = 2, nrow = 1, rel_widths = c(2,1),
-                      labels = "auto", label_size = 14, label_x = 0.1, label_y = 0.98)
+                      align = "h", ncol = 2, nrow = 1, rel_widths = c(2,1),
+                      labels = c("(a)", "(b)"), label_x = 0.85, label_y = 0.98,
+                      label_size = 10)
+
 enfigure
 
 ggsave(filename = "results/figures/elastic_net_coefficients_both_years_plots.tiff",
@@ -481,161 +483,129 @@ ggsave(filename = "results/figures/elastic_net_coefficients_both_years_plots.tif
 
 
 #####################################################################################################
-#### GLMM LASSO analysis of per-cage preference and phenolics
+#### Analysis of phytochemsitry data -- phenolics and volatiles
 #####################################################################################################
 
-#### Cleaning dataset for glmmLASSO
-phenPrefTransData <- readRDS("output/full_phenolics_preference_transmission_dataset.rds")
+#### Cleaning dataset
+phenPrefTransData <- readRDS("output/chemistry_preference_transmission_dataset.rds")
+summary(phenPrefTransData)
+with(phenPrefTransData, table(genotype, week))
+
+
+#### MANOVA to test for overall differences between Resistant and Susceptible plant chemistry
+## Set up formula
+manovaDF <- phenPrefTransData %>% dplyr::select(trt, xfpop, 25:ncol(phenPrefTransData)) %>% 
+  dplyr::filter(., complete.cases(.)) 
+manovaY <- manovaDF %>% dplyr::select(-trt, -xfpop)
+manovaformula <- as.formula(c("cbind(", paste(names(manovaY), collapse = ", "), ") ~ trt + xfpop"))
+manovaformula
+
+manovaMod <- manova(manovaformula, data = manovaDF)
+summary(manovaMod, test = "Wilks")
+## MANOVA doesn't work
+
+
+
+#####################################################################################################
+#### Elastic Net analysis of per-cage preference and phenolics
+
+#### Code for choices
+# p1, mu1 = source plant
+# p2, mu2 = test plant
+
+#### Comparing rep and Rep2 (from Chris' dataset)
+with(phenPrefTransData, table(rep, Rep2))
+## Rep2 provides unique rep number across blocks; rep repeats 1-4 within each block
+
 ## Select only variables for analysis
-datalasso <- phenPrefTransData %>% dplyr::select(week, trt, Rep2, p1, mu1, PD_symptoms_index, 
-                                                 ferulic.acid, contains(".stem"), contains(".leaf"), 
-                                                 contains("pc"), contains("res")) %>%
+datalasso <- phenPrefTransData %>% dplyr::select(-block, -genotype, -rep, -test_plant_infection, -notes,
+                                                 -nbugs, -totalInfectious, -propInfectious, -plantID,
+                                                 -xfpop, -mu2, -p2, -Number, -Date, -Treatment, -TreatCode, 
+                                                 -Time, -Plant) %>%
   dplyr::filter(., complete.cases(.))
-# Standardize all continuous explanatory variables
-xlasso <- datalasso %>% dplyr::select(-trt, -Rep2, -p1, -mu1) %>% scale(., center = TRUE, scale = TRUE) %>% as.data.frame()
-groupdata <- datalasso %>% dplyr::select(trt, Rep2)
-datalasso2 <- cbind(xlasso, groupdata)
-# Define data classes
-datalasso2$Rep2 <- factor(datalasso2$Rep2)
-datalasso2$trt <- factor(datalasso2$trt)
-datalasso2$trt <- as.numeric(datalasso2$trt) - 1
-# Define trt as a binary numeric variable: R = 0, S = 1
-# Create separate attraction and leaving datasets, and put p1 and mu1 back into datasets
-attrlasso <- leavelasso <- datalasso2
-attrlasso$p1 <- datalasso$p1
-leavelasso$mu1 <- datalasso$mu1
+str(datalasso)
 
-str(attrlasso)
-str(leavelasso)
+## Glmnet wants the data to be matrices, not data frames.
+x_train <- datalasso %>% dplyr::select(-p1, -Rep2, -mu1) %>% as.matrix()
 
-#### Lambda values for cross-validation
-lambdaValues <- seq(500, 0, by = -5)
+#########################################################################################################
+#### Elastic Net on attraction rates
+y_train <- datalasso[,"p1"] %>% as.matrix()
 
-# Create formula from column names, rather than writing them all out
-attrformulaDF <- attrlasso %>% dplyr::select(-Rep2, -p1)
-attrformula <- as.formula(c("p1~", paste(names(lassoformulaDF), collapse = "+")))
-attrformula
+## Set up trainControl
+train_control = trainControl(method = "cv",
+                             number = 5, returnResamp = "all",
+                             savePredictions = "final")
 
-# cv.glmmLasso fails with all of the covariates. Need to look into this. Just using the max that will run for now
-cv.attr <- cv.glmmLasso(dat = attrlasso,
-                        form.fixed = p1 ~ week + PD_symptoms_index + ferulic.acid + caftaric.acid.stem + 
-                          procyanidin.B1.stem + catechin.stem + procyanidin.B2.stem + 
-                          epicatechin.stem + pc1.stem + pc3.stem + pc5.stem + pc6.stem + 
-                          pc7.stem + pc8.stem + pc9.stem + pc10.stem + pc11.stem + 
-                          pc12.stem + rutin.stem + res1.stem + res2.stem + res3.stem +
-                          res4.stem + caftaric.acid.leaf + procyanidin.B1.leaf + catechin.leaf + 
-                          procyanidin.B2.leaf + epicatechin.leaf + pc1.leaf + pc3.leaf + 
-                          pc5.leaf + pc6.leaf + pc7.leaf + pc8.leaf + pc9.leaf + pc10.leaf +
-                          pc11.leaf + pc12.leaf,
-                        form.rnd = list(Rep2 = ~1),
-                        lambda = lambdaValues,
-                        family = poisson(link = log))
+#### Create a custom tuning grid.
+## Find max lambda for cross validation
+## Formula found here: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+## Need to center and scale predictors first
+xenet <- enetTransdata %>% dplyr::select(-test_plant_infection) %>% scale(., center = TRUE, scale = TRUE)
+yenet <- ifelse(enetTransdata$test_plant_infection == "infected", 1, 0)
+lambdaMax <- apply(xenet, 2, function(x) sum(yenet*x)) %>% max()
+## set upper limit for lamba range based on lambdaMax and alpha
+## from this website: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+alphas = seq(0, 1, by = 0.1)
+lambdaMaxAdj <- 1/(1-alphas)*lambdaMax
+lambdaMaxAdj[lambdaMaxAdj == Inf] <- max(lambdaMaxAdj[lambdaMaxAdj != Inf])
+enetTuneList <- vector("list", length(alphas))
+for(i in 1:length(alphas)){
+  enetTuneList[[i]] <- expand.grid(alpha = alphas[i], 
+                                   lambda = seq(0, lambdaMaxAdj[i], length.out = 20))
+}
+enet_grid <- enetTuneList %>% rbindlist() %>% as.data.frame()
 
-bicPath <- cv.attr$BIC_path
-cvRes <- cbind(lambdaValues, bicPath) %>% as.data.frame
-bestLambda <- dplyr::filter(cvRes, bicPath == min(bicPath, na.rm = TRUE))
+## Run cross-validation once
+enet = train(x_train, y_train, method = "glmnet",
+             metric = "ROC",
+             preProcess = c("center", "scale"),
+             tuneGrid = enet_grid,
+             trControl = train_control)
+print(enet)
+plot(enet)
+enet$bestTune
+(enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
 
-
-attrmod <- glmmLasso(attrformula,
-                     rnd = list(Rep2 = ~1),
-                     lambda = 20,
-                     family = poisson(link = log),
-                     data = attrlasso,
-                     final.re = TRUE,
-                     control = list(print.iter = TRUE))
+enet3 <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
+                             alpha = enet$bestTune$alpha, lambda = lambdas)
+(enetResults3 <- coef(enet3, s = enet$bestTune$lambda))
 
 
-summary(attrmod)
+#### The cva.glmnet and caret results largely match up
+#### Results are highly variable across CV runs. Need to run CV multiple times and average coefficient results
+## Run caret::train() through for loop
 
-saveRDS(cv.attr, file = "output/cv_attraction_glmmLasso.rds")
+## Number of runs
+nrun <- 500
 
+## Empty vectors for coefficients and best tune parameters
+enetResultsList <- enetBestTuneList <- vector("list", nrun)
 
-#### Plotting attraction results
-attrResults <- data.frame(params = names(attrmod$coefficients),
-                          estimates = attrmod$coefficients,
-                          SE = attrmod$fixerror) %>% arrange(estimates)
-attrResults$params <- factor(attrResults$params, levels = attrResults$params[order(attrResults$estimates, decreasing = FALSE)])
+for(i in 1:nrun){
+  enetTrain = train(x_train, y_train, method = "glmnet",
+                    metric = "ROC",
+                    preProcess = c("center", "scale"),
+                    tuneGrid = enet_grid,
+                    trControl = train_control)
+  enetBestTuneList[[i]] <- enetTrain$bestTune
+  enet <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
+                              alpha = enetTrain$bestTune$alpha, lambda = lambdas)
+  enetResultsList[[i]] <- as.data.frame(t(as.matrix(coef(enet, s = enetTrain$bestTune$lambda))))
+}
 
-attrPlot <- ggplot(attrResults, aes(y = params, x = estimates)) +
-  geom_errorbarh(aes(xmin = estimates-SE, xmax = estimates+SE), colour = "black", height = 0.2) +
-  geom_point(size = 3) +
-  geom_vline(linetype = "longdash", xintercept = 0) +
-  xlab("Coefficient estimate") + ylab("Covariate") + 
-  theme_bw() + 
-  theme(axis.line = element_line(colour = "black"),
-        text = element_text(size = 14),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-attrPlot
+## Combine and summarize best tuning parameters
+enetBestTune17 <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
+hist(enetBestTune17$alpha)
+hist(enetBestTune17$lambda)
+## Get mode of alpha and lambda
+modeTune17 <- apply(enetBestTune17, 2, mfv)
 
-ggsave("results/figures/2017_figures/attraction_phenolics_lasso_plot_2017.jpg", plot = attrPlot,
-       width = 7, height = 7, units = "in")
-
-
-#### Analysis of leaving rates
-# Create formula from column names, rather than writing them all out
-leaveformulaDF <- leavelasso %>% dplyr::select(-Rep2, -mu1)
-leaveformula <- as.formula(c("mu1~", paste(names(lassoformulaDF), collapse = "+")))
-leaveformula
-
-# cv.glmmLasso fails with all of the covariates. Need to look into this. Just using the max that will run for now
-cv.leave <- cv.glmmLasso(dat = leavelasso,
-                         form.fixed = mu1 ~ week + PD_symptoms_index + ferulic.acid + caftaric.acid.stem + 
-                           procyanidin.B1.stem + catechin.stem + procyanidin.B2.stem + 
-                           epicatechin.stem + pc1.stem + pc3.stem + pc5.stem + pc6.stem + 
-                           pc7.stem + pc8.stem + pc9.stem + pc10.stem + pc11.stem + 
-                           pc12.stem + rutin.stem + res1.stem + res2.stem + res3.stem + 
-                           res4.stem + caftaric.acid.leaf + procyanidin.B1.leaf + catechin.leaf + 
-                           procyanidin.B2.leaf + epicatechin.leaf + pc1.leaf + pc3.leaf + 
-                           pc5.leaf + pc6.leaf + pc7.leaf + pc8.leaf + pc9.leaf + pc10.leaf + 
-                           pc11.leaf + pc12.leaf,
-                         form.rnd = list(Rep2 = ~1),
-                         lambda = seq(500, 0, by = -5),
-                         family = poisson(link = log))
-
-bicPath <- cv.leave$BIC_path
-cvRes <- cbind(lambdaValues, bicPath) %>% as.data.frame
-bestLambda <- dplyr::filter(cvRes, bicPath == min(bicPath, na.rm = TRUE))
-bestLambda
-
-leavemod <- glmmLasso(leaveformula,
-                      rnd = list(Rep2 = ~1),
-                      lambda = 10,
-                      family = poisson(link = log),
-                      data = leavelasso,
-                      final.re = TRUE,
-                      control = list(print.iter = TRUE))
-
-
-summary(leavemod)
-
-saveRDS(cv.leave, file = "output/cv_leaving_glmmLasso.rds")
-
-
-#### Plotting leaveaction results
-leaveResults <- data.frame(params = names(leavemod$coefficients),
-                           estimates = leavemod$coefficients,
-                           SE = leavemod$fixerror) %>% arrange(estimates)
-leaveResults$params <- factor(leaveResults$params, levels = leaveResults$params[order(leaveResults$estimates, decreasing = FALSE)])
-
-leavePlot <- ggplot(leaveResults, aes(y = params, x = estimates)) +
-  geom_errorbarh(aes(xmin = estimates-SE, xmax = estimates+SE), colour = "black", height = 0.2) +
-  geom_point(size = 3) +
-  geom_vline(linetype = "longdash", xintercept = 0) +
-  xlab("Coefficient estimate") + ylab("Covariate") + 
-  theme_bw() + 
-  theme(axis.line = element_line(colour = "black"),
-        text = element_text(size = 14),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-leavePlot
-
-ggsave("results/figures/2017_figures/leaving_phenolics_lasso_plot_2017.jpg", plot = leavePlot,
-       width = 7, height = 7, units = "in")
+#### Combine runs and summarize coefficient estimates
+enetResultsData <- enetResultsList %>% rbindlist() %>% as.data.frame()
+enetSummary17 <- data.frame(meancoef = apply(enetResultsData, 2, mean),
+                            mediancoef = apply(enetResultsData, 2, median),
+                            sdcoef = apply(enetResultsData, 2, sd))
 
 
 
@@ -644,3 +614,164 @@ ggsave("results/figures/2017_figures/leaving_phenolics_lasso_plot_2017.jpg", plo
 
 
 
+
+
+
+
+
+
+
+
+# # Standardize all continuous explanatory variables
+# xlasso <- datalasso %>% dplyr::select(-trt, -Rep2, -p1, -mu1) %>% scale(., center = TRUE, scale = TRUE) %>% as.data.frame()
+# groupdata <- datalasso %>% dplyr::select(trt, Rep2)
+# datalasso2 <- cbind(xlasso, groupdata)
+# # Define data classes
+# datalasso2$Rep2 <- factor(datalasso2$Rep2)
+# datalasso2$trt <- factor(datalasso2$trt)
+# datalasso2$trt <- as.numeric(datalasso2$trt) - 1
+# # Define trt as a binary numeric variable: R = 0, S = 1
+# # Create separate attraction and leaving datasets, and put p1 and mu1 back into datasets
+# attrlasso <- leavelasso <- datalasso2
+# attrlasso$p1 <- datalasso$p1
+# leavelasso$mu1 <- datalasso$mu1
+# 
+# str(attrlasso)
+# str(leavelasso)
+# 
+# #### Lambda values for cross-validation
+# lambdaValues <- seq(500, 0, by = -5)
+# 
+# # Create formula from column names, rather than writing them all out
+# attrformulaDF <- attrlasso %>% dplyr::select(-Rep2, -p1)
+# attrformula <- as.formula(c("p1~", paste(names(lassoformulaDF), collapse = "+")))
+# attrformula
+# 
+# # cv.glmmLasso fails with all of the covariates. Need to look into this. Just using the max that will run for now
+# cv.attr <- cv.glmmLasso(dat = attrlasso,
+#                         form.fixed = p1 ~ week + PD_symptoms_index + ferulic.acid + caftaric.acid.stem + 
+#                           procyanidin.B1.stem + catechin.stem + procyanidin.B2.stem + 
+#                           epicatechin.stem + pc1.stem + pc3.stem + pc5.stem + pc6.stem + 
+#                           pc7.stem + pc8.stem + pc9.stem + pc10.stem + pc11.stem + 
+#                           pc12.stem + rutin.stem + res1.stem + res2.stem + res3.stem +
+#                           res4.stem + caftaric.acid.leaf + procyanidin.B1.leaf + catechin.leaf + 
+#                           procyanidin.B2.leaf + epicatechin.leaf + pc1.leaf + pc3.leaf + 
+#                           pc5.leaf + pc6.leaf + pc7.leaf + pc8.leaf + pc9.leaf + pc10.leaf +
+#                           pc11.leaf + pc12.leaf,
+#                         form.rnd = list(Rep2 = ~1),
+#                         lambda = lambdaValues,
+#                         family = poisson(link = log))
+# 
+# bicPath <- cv.attr$BIC_path
+# cvRes <- cbind(lambdaValues, bicPath) %>% as.data.frame
+# bestLambda <- dplyr::filter(cvRes, bicPath == min(bicPath, na.rm = TRUE))
+# 
+# 
+# attrmod <- glmmLasso(attrformula,
+#                      rnd = list(Rep2 = ~1),
+#                      lambda = 20,
+#                      family = poisson(link = log),
+#                      data = attrlasso,
+#                      final.re = TRUE,
+#                      control = list(print.iter = TRUE))
+# 
+# 
+# summary(attrmod)
+# 
+# saveRDS(cv.attr, file = "output/cv_attraction_glmmLasso.rds")
+# 
+# 
+# #### Plotting attraction results
+# attrResults <- data.frame(params = names(attrmod$coefficients),
+#                           estimates = attrmod$coefficients,
+#                           SE = attrmod$fixerror) %>% arrange(estimates)
+# attrResults$params <- factor(attrResults$params, levels = attrResults$params[order(attrResults$estimates, decreasing = FALSE)])
+# 
+# attrPlot <- ggplot(attrResults, aes(y = params, x = estimates)) +
+#   geom_errorbarh(aes(xmin = estimates-SE, xmax = estimates+SE), colour = "black", height = 0.2) +
+#   geom_point(size = 3) +
+#   geom_vline(linetype = "longdash", xintercept = 0) +
+#   xlab("Coefficient estimate") + ylab("Covariate") + 
+#   theme_bw() + 
+#   theme(axis.line = element_line(colour = "black"),
+#         text = element_text(size = 14),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_rect(colour = "black"),
+#         panel.background = element_blank()) 
+# attrPlot
+# 
+# ggsave("results/figures/2017_figures/attraction_phenolics_lasso_plot_2017.jpg", plot = attrPlot,
+#        width = 7, height = 7, units = "in")
+# 
+# 
+# #### Analysis of leaving rates
+# # Create formula from column names, rather than writing them all out
+# leaveformulaDF <- leavelasso %>% dplyr::select(-Rep2, -mu1)
+# leaveformula <- as.formula(c("mu1~", paste(names(lassoformulaDF), collapse = "+")))
+# leaveformula
+# 
+# # cv.glmmLasso fails with all of the covariates. Need to look into this. Just using the max that will run for now
+# cv.leave <- cv.glmmLasso(dat = leavelasso,
+#                          form.fixed = mu1 ~ week + PD_symptoms_index + ferulic.acid + caftaric.acid.stem + 
+#                            procyanidin.B1.stem + catechin.stem + procyanidin.B2.stem + 
+#                            epicatechin.stem + pc1.stem + pc3.stem + pc5.stem + pc6.stem + 
+#                            pc7.stem + pc8.stem + pc9.stem + pc10.stem + pc11.stem + 
+#                            pc12.stem + rutin.stem + res1.stem + res2.stem + res3.stem + 
+#                            res4.stem + caftaric.acid.leaf + procyanidin.B1.leaf + catechin.leaf + 
+#                            procyanidin.B2.leaf + epicatechin.leaf + pc1.leaf + pc3.leaf + 
+#                            pc5.leaf + pc6.leaf + pc7.leaf + pc8.leaf + pc9.leaf + pc10.leaf + 
+#                            pc11.leaf + pc12.leaf,
+#                          form.rnd = list(Rep2 = ~1),
+#                          lambda = seq(500, 0, by = -5),
+#                          family = poisson(link = log))
+# 
+# bicPath <- cv.leave$BIC_path
+# cvRes <- cbind(lambdaValues, bicPath) %>% as.data.frame
+# bestLambda <- dplyr::filter(cvRes, bicPath == min(bicPath, na.rm = TRUE))
+# bestLambda
+# 
+# leavemod <- glmmLasso(leaveformula,
+#                       rnd = list(Rep2 = ~1),
+#                       lambda = 10,
+#                       family = poisson(link = log),
+#                       data = leavelasso,
+#                       final.re = TRUE,
+#                       control = list(print.iter = TRUE))
+# 
+# 
+# summary(leavemod)
+# 
+# saveRDS(cv.leave, file = "output/cv_leaving_glmmLasso.rds")
+# 
+# 
+# #### Plotting leaveaction results
+# leaveResults <- data.frame(params = names(leavemod$coefficients),
+#                            estimates = leavemod$coefficients,
+#                            SE = leavemod$fixerror) %>% arrange(estimates)
+# leaveResults$params <- factor(leaveResults$params, levels = leaveResults$params[order(leaveResults$estimates, decreasing = FALSE)])
+# 
+# leavePlot <- ggplot(leaveResults, aes(y = params, x = estimates)) +
+#   geom_errorbarh(aes(xmin = estimates-SE, xmax = estimates+SE), colour = "black", height = 0.2) +
+#   geom_point(size = 3) +
+#   geom_vline(linetype = "longdash", xintercept = 0) +
+#   xlab("Coefficient estimate") + ylab("Covariate") + 
+#   theme_bw() + 
+#   theme(axis.line = element_line(colour = "black"),
+#         text = element_text(size = 14),
+#         panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_rect(colour = "black"),
+#         panel.background = element_blank()) 
+# leavePlot
+# 
+# ggsave("results/figures/2017_figures/leaving_phenolics_lasso_plot_2017.jpg", plot = leavePlot,
+#        width = 7, height = 7, units = "in")
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
