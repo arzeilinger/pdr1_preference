@@ -4,7 +4,7 @@ rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "ggplot2", "DHARMa",
                  "bbmle", "glmnetUtils", "caret",
-                 "modeest", "cowplot")
+                 "modeest", "cowplot", "broom", "car", "ggbiplot")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -483,66 +483,380 @@ ggsave(filename = "results/figures/elastic_net_coefficients_both_years_plots.tif
 
 
 #####################################################################################################
+#####################################################################################################
 #### Analysis of phytochemsitry data -- phenolics and volatiles
 #####################################################################################################
 
 #### Cleaning dataset
 phenPrefTransData <- readRDS("output/chemistry_preference_transmission_dataset.rds")
 summary(phenPrefTransData)
-with(phenPrefTransData, table(genotype, week))
+with(phenPrefTransData, table(trt, week))
+
+#### Code for choices
+# p1, mu1 = source plant
+# p2, mu2 = test plant
+
+#### Log transform response attraction and leaving rates and select only variables of interest
+## compounds are in columns 25:ncol
+pptData <- phenPrefTransData %>% mutate(logp1 = log(p1), logmu1 = log(mu1)) %>% # Log transform p1 and mu1 for linear models
+  dplyr::select(week, PD_symptoms_index, trt, Rep2, xfpop, mu1, p1, logp1, logmu1, 25:ncol(phenPrefTransData))
 
 
-#### MANOVA to test for overall differences between Resistant and Susceptible plant chemistry
+######################################################################################################
+#### MANOVA of total phenolics and volatiles between resistant and susceptible vines
 ## Set up formula
-manovaDF <- phenPrefTransData %>% dplyr::select(trt, xfpop, 25:ncol(phenPrefTransData)) %>% 
+manovaDF <- phenPrefTransData %>% dplyr::select(week, trt, 25:ncol(phenPrefTransData)) %>% 
   dplyr::filter(., complete.cases(.)) 
-manovaY <- manovaDF %>% dplyr::select(-trt, -xfpop)
-manovaformula <- as.formula(c("cbind(", paste(names(manovaY), collapse = ", "), ") ~ trt + xfpop"))
-manovaformula
+manovaYtotals <- manovaDF %>% dplyr::select(contains("total"))
+manovaformulatotals <- as.formula(c("cbind(", paste(names(manovaYtotals), collapse = ", "), ") ~ week*trt"))
+manovaformulatotals
 
-manovaMod <- manova(manovaformula, data = manovaDF)
-summary(manovaMod, test = "Wilks")
-## MANOVA doesn't work
+manovaMod <- manova(manovaformulatotals, data = manovaDF)
+manovaTests <- c("Pillai", "Wilks", "Hotelling-Lawley", "Roy")
+for(i in 1:length(manovaTests)){
+  print(summary(manovaMod, test = manovaTests[i]))
+}
+## RESULTS: trt main effect and week:trt interaction are significant
+summary.aov(manovaMod) ## Univariate ANCOVAs
+
+
+## Make a data set for plotting
+## Select only totals, gather into a "long" version, and calculate means and SE for each week-trt combination
+totalchemMeans <- manovaDF %>% dplyr::select(week, trt, contains("total")) %>%
+  gather(key = compound, value = concentration, total.phenolics.stem, total.phenolics.leaf, total.volatiles) %>%
+  group_by(week, trt, compound) %>% 
+  summarise_at("concentration",
+               list(~mean(.), se = ~sd(.)/sqrt(length(.)))) %>%
+  dplyr::rename(resistance_status = trt)
+print.data.frame(totalchemMeans)
+
+#### Plot total phytochemicals over time
+totalChemPlot <- ggplot(data=totalchemMeans, aes(x=week, y=mean, shape = compound, linetype = resistance_status,
+                                                 group = interaction(compound, resistance_status))) +
+  geom_line(colour = "black", size=1.25) +
+  geom_point(colour = "black", size=2.5) +
+  geom_errorbar(aes(ymax=mean+se, ymin=mean-se), width=0.2, linetype = 1) +
+  scale_x_continuous(name = "Weeks post inoculation", 
+                     breaks = c(2,5,8,14), limits = c(2,14)) + 
+  scale_y_continuous(name = "Concentration (ppm)") +
+                     #limits = c(0,4000)) +
+  # 007 = open circles, dashed line
+  # 092 = open triangles, dashed line
+  # 094 = closed circles, solid line
+  # 102 = closed triangles, solid line
+  # scale_shape_manual(values = c(1,2,3)) +
+  # scale_linetype_manual(values = c(2,1)) +
+  theme_bw(base_size=16) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank())
+totalChemPlot
+
+ggsave("results/figures/2017_figures/total_phytochemicals_timeseries_plot.jpg", plot = totalChemPlot,
+       width = 10, height = 7, units = "in")
+
+
+##############################################################################################################
+#### Principal Component Analysis of chemistry data and transmission data
+
+## Remove variables of totals and grouped compounds
+pptData <- pptData %>% dplyr::select(-contains("total"), -monoterpenoids, -green.leafy.volatiles,
+                                     -isoprenoids.and.related, -sequiterpenoids, -early.unknowns, -late.unknowns)
+
+#### PCA ordination plots for each time point
+figList <- pcaWeekList <- pptWeekData <- vector("list", length(unique(pptData$week)))
+
+for(i in 1:length(unique(pptData$week))){
+  pptData.i <- pptData %>% 
+    dplyr::select(-PD_symptoms_index, -xfpop) %>%
+    dplyr::filter(week == unique(week)[i]) %>% 
+    dplyr::filter(., complete.cases(.))
+  pptWeekData[[i]] <- pptData.i
+  chemVars.i <- pptData.i %>% 
+    dplyr::select(which(names(pptData.i) == "protocatechuic.acid.hexoside"):ncol(pptData.i)) %>% 
+    dplyr::select(-contains("total"))
+  pcaWeekList[[i]] <- prcomp(chemVars.i, scale = TRUE)
+  figList[[i]] <- ggbiplot(pcaWeekList[[i]], choices = 1:2, obs.scale = 1, var.scale = 1, groups = pptData.i$trt, 
+                           ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95, var.axes = FALSE,
+                           theme(axis.line = element_line(colour = "black"),
+                                 text = element_text(size = 12)))
+}
+
+pcaWeekFigure <- plot_grid(figList[[1]], figList[[2]], figList[[3]], figList[[4]],
+                           align = "h", ncol = 2, nrow = 2, 
+                           labels = c("(a)", "(b)", "(c)", "(d)"), #label_x = 0.85, label_y = 0.98,
+                           label_size = 16)
+
+pcaWeekFigure
+
+ggsave(filename = "results/figures/2017_figures/chemistry_pca_weeks_plots.tiff",
+       plot = pcaWeekFigure,
+       width = 30, height = 30, units = "cm", dpi = 300, compression = "lzw")
+
+
+###########################################################################################################
+#### PC REGRESSION
+## PCs vs. genotype, only week 14
+## As a post-hoc test, should reduce critical level alpha when evaluating p-values
+pptDataWeek14 <- pptWeekData[[4]]
+pcaWeek14 <- pcaWeekList[[4]]
+summary(pcaWeek14)
+str(pcaWeek14)
+table(pptDataWeek14$trt)
+
+pcaPlotWeek14 <- ggbiplot(pcaWeek14, choices = 1:2, obs.scale = 1, var.scale = 1, groups = pptDataWeek14$trt, 
+                          ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95, var.axes = TRUE,
+                          theme(axis.line = element_line(colour = "black"),
+                                text = element_text(size = 12)))
+
+pcaPlotWeek14
+
+ggsave(filename = "results/figures/2017_figures/chemistry_pca_week14_plot.tiff",
+       plot = pcaPlotWeek14,
+       width = 30, height = 30, units = "cm", dpi = 300, compression = "lzw")
+
+## Scree plot of variance captured by PCs
+# Variance explained by each component
+pcaVar <- pcaWeek14$sdev^2
+# Proportion variance explained
+pve <- pcaVar/sum(pcaVar)
+pve
+# Plot variance captured vs. PC
+plot(pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained", ylim = c(0,1), type = "b")
+## Results: First PC explains 50% of all variance; 2nd PC explains 13%; next 3 are relatively similar, but each explains < 10% of variance
+# Cummulative variance explained vs. PC
+cumpve <- cumsum(pve)
+plot(cumsum(pve), xlab="Principal Component", ylab = "Cumulative Proportion of Variance Explained", 
+     ylim=c(0,1), type='b')
+
+
+#### PCA regression with p1 and mu1
+## Select PCs that explain a cumulative 95% of variance
+goodPCindex <- which(round(cumpve, digits = 2) <= 0.99)
+goodPCscores <- as.data.frame(pcaWeek14$x[,goodPCindex])
+## cbind good PCs to dat
+chemPC14 <- cbind(pptDataWeek14, goodPCscores)
+head(chemPC14)
+
+#### Run ANOVAs in a loop
+pcaANOVAList <- vector("list", length(goodPCindex))
+for(i in 1:length(goodPCindex)){
+  pc.i <- names(goodPCscores)[i]
+  anova.i <- aov(chemPC14[,which(names(chemPC14) == pc.i)] ~ trt, data = chemPC14)
+  pcaANOVAList[[i]] <- tidy(anova.i, conf.level = 0.95)
+  print(pc.i)
+  print(pcaANOVAList[[i]])
+}
+## PC1 and PC2 are significantly different between genotypes
+## How are they different?
+pca14Summary <- chemPC14 %>% group_by(trt) %>% summarise_at(c("PC1", "PC2"), list(~mean(.), se = ~sd(.)/sqrt(length(.))))
+
+#### Look at the PCA loadings 
+PCloadings <- pcaWeek14$rotation
+
+## PC1 loadings
+loadings1 <- data.frame(compounds = attr(PCloadings[,1], "names"),
+                        loadings = as.numeric(PCloadings[,1]))
+loadings1 %>% arrange(-loadings)
+
+## PC2 loadings
+loadings2 <- data.frame(compounds = attr(PCloadings[,2], "names"),
+                        loadings = as.numeric(PCloadings[,2]))
+loadings2 %>% arrange(-loadings)
+
+
+## Make sure I'm interpreting the loadings correctly
+(chem14Means <- pptDataWeek14 %>% 
+  group_by(trt) %>% 
+  summarise_at(c("coutaric.acid.1", "deltaviniferin", "piceid", "geraniol"), 
+               list(~mean(.), se = ~sd(.)/sqrt(length(.)))))
+
+###########################################################################################################
+#### PC REGRESSION
+## PCs vs. genotype, only week 8
+## As a post-hoc test, should reduce critical level alpha when evaluating p-values
+pptDataWeek8 <- pptWeekData[[3]]
+pcaWeek8 <- pcaWeekList[[3]]
+summary(pcaWeek8)
+str(pcaWeek8)
+table(pptDataWeek8$trt)
+
+pcaPlotWeek8 <- ggbiplot(pcaWeek8, choices = c(1,4), obs.scale = 1, var.scale = 1, groups = pptDataWeek8$trt, 
+                          ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95, var.axes = TRUE,
+                          theme(axis.line = element_line(colour = "black"),
+                                text = element_text(size = 12)))
+
+pcaPlotWeek8
+
+ggsave(filename = "results/figures/2017_figures/chemistry_pca_week8_plot.tiff",
+       plot = pcaPlotWeek8,
+       width = 30, height = 30, units = "cm", dpi = 300, compression = "lzw")
+
+## Scree plot of variance captured by PCs
+# Variance explained by each component
+pcaVar <- pcaWeek8$sdev^2
+# Proportion variance explained
+pve <- pcaVar/sum(pcaVar)
+pve
+# Plot variance captured vs. PC
+plot(pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained", ylim = c(0,1), type = "b")
+## Results: First PC explains 30% of all variance; 2nd PC explains 13%; next 2 are relatively similar, but each explains ~ 10% of variance
+# Cummulative variance explained vs. PC
+cumpve <- cumsum(pve)
+cumpve
+plot(cumsum(pve), xlab="Principal Component", ylab = "Cumulative Proportion of Variance Explained", 
+     ylim=c(0,1), type='b')
+
+
+#### PCA regression with p1 and mu1
+## Select PCs that explain a cumulative 95% of variance
+goodPCindex <- which(round(cumpve, digits = 2) <= 0.95)
+goodPCscores <- as.data.frame(pcaWeek8$x[,goodPCindex])
+## cbind good PCs to dat
+chemPC8 <- cbind(pptDataWeek8, goodPCscores)
+head(chemPC8)
+
+#### Run ANOVAs in a loop
+pcaANOVAList <- vector("list", length(goodPCindex))
+for(i in 1:length(goodPCindex)){
+  pc.i <- names(goodPCscores)[i]
+  anova.i <- aov(chemPC8[,which(names(chemPC8) == pc.i)] ~ trt, data = chemPC8)
+  pcaANOVAList[[i]] <- tidy(anova.i, conf.level = 0.95)
+  print(pc.i)
+  print(pcaANOVAList[[i]])
+}
+## PC4 is strongly significantly different between genotypes
+## How are they different?
+pca8Summary <- chemPC8 %>% group_by(trt) %>% summarise_at("PC4", list(~mean(.), se = ~sd(.)/sqrt(length(.))))
+pca8Summary
+
+#### Look at the PCA loadings 
+PCloadings <- pcaWeek8$rotation
+
+## PC1 loadings
+loadings4 <- data.frame(compounds = attr(PCloadings[,4], "names"),
+                        loadings = as.numeric(PCloadings[,4]))
+loadings4 %>% arrange(-loadings)
+
+
+
+
+#################################################################################################
+#### PC REGRESSION with vector attraction and leaving rates
+#### Run PCA over all weeks, for PC regression
+## Use the untransformed data
+## Create a data set of just the chemistry data without totals
+chemVars <- pptData %>% dplyr::select(10:ncol(pptData)) %>% dplyr::select(-contains("total"))
+names(chemVars)
+
+#### PCA of chemistry variables across all time points
+pcaOut <- prcomp(chemVars, scale = TRUE)
+summary(pcaOut)
+str(pcaOut)
+#### Biplot using ggbiplot
+## Biplot of PC1 vs PC2
+pc12biplot <- ggbiplot(pcaOut, choices = 1:2, obs.scale = 1, var.scale = 1, groups = pptData$trt, 
+                       ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95)
+pc12biplot
+ggsave(pc12biplot, filename = "results/figures/2017_figures/PCA_1-2_biplot_phytochemistry.jpg")
+
+
+## Biplot of PC1 vs PC3
+pc13biplot <- ggbiplot(pcaOut, choices = c(1,3), obs.scale = 1, var.scale = 1, groups = pptData$trt, 
+                       ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95)
+pc13biplot
+## Biplot of PC2 vs PC3
+pc23biplot <- ggbiplot(pcaOut, choices = c(2,3), obs.scale = 1, var.scale = 1, groups = pptData$trt, 
+                       ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95)
+pc23biplot
+
+
+## Scree plot of variance captured by PCs
+# Variance explained by each component
+pcaVar <- pcaOut$sdev^2
+# Proportion variance explained
+pve <- pcaVar/sum(pcaVar)
+pve
+# Plot variance captured vs. PC
+plot(pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained", ylim = c(0,1), type = "b")
+## Results: First PC explains 43% of all variance; next 3 PCs are relatively similar, but each explains < 10% of variance
+# Cummulative variance explained vs. PC
+cumpve <- cumsum(pve)
+plot(cumsum(pve), xlab="Principal Component", ylab = "Cumulative Proportion of Variance Explained", 
+     ylim=c(0,1), type='b')
+
+
+#### PCA regression with p1 and mu1
+## Select PCs that explain a cumulative 95% of variance
+goodPCindex <- which(round(cumpve, digits = 2) <= 0.90)
+goodPCscores <- as.data.frame(pcaOut$x[,goodPCindex])
+## cbind good PCs to dat
+chemPC <- cbind(pptData, goodPCscores)
+
+#### PC Regression of attraction rate
+PCattrformulaDF <- chemPC %>% dplyr::select(contains("PC"))
+PCattrformula <- as.formula(c("logp1 ~", paste(names(PCattrformulaDF), collapse = "+")))
+
+PCattrMod <- lm(PCattrformula, data = chemPC)
+plot(simulateResiduals(PCattrMod))
+summary(PCattrMod)
+## Results: PC1 and 2 are significantly related to p1; PCs 4,5, and 10 are marginially significant
+PCloadings <- pcaOut$rotation
+
+## PC1 loadings
+loadings1 <- data.frame(compounds = attr(PCloadings[,1], "names"),
+                                     loadings = as.numeric(PCloadings[,1]))
+loadings1 %>% arrange(abs(loadings))
+
+## PC2 loadings
+loadings2 <- data.frame(compounds = attr(PCloadings[,2], "names"),
+                        loadings = as.numeric(PCloadings[,2]))
+loadings2 %>% arrange(abs(loadings))
+
+
+#### PC Regression of leaving rate
+PCleaveformula <- as.formula(c("logmu1 ~", paste(names(PCattrformulaDF), collapse = "+")))
+
+PCleaveMod <- lm(PCleaveformula, data = chemPC)
+plot(simulateResiduals(PCleaveMod))
+summary(PCleaveMod)
+## Results: only PC9 is significantly related to mu1
+PCloadings <- pcaOut$rotation
+
+## PC9 loadings
+loadings9 <- data.frame(compounds = attr(PCloadings[,9], "names"),
+                        loadings = as.numeric(PCloadings[,9]))
+loadings9 %>% arrange(abs(loadings))
+
+
 
 
 
 #####################################################################################################
 #### Elastic Net analysis of per-cage preference and phenolics
 
-#### Code for choices
-# p1, mu1 = source plant
-# p2, mu2 = test plant
-
-#### Comparing rep and Rep2 (from Chris' dataset)
-with(phenPrefTransData, table(rep, Rep2))
-## Rep2 provides unique rep number across blocks; rep repeats 1-4 within each block
-
-## Select only variables for analysis
-datalasso <- phenPrefTransData %>% dplyr::select(-block, -genotype, -rep, -test_plant_infection, -notes,
-                                                 -nbugs, -totalInfectious, -propInfectious, -plantID,
-                                                 -xfpop, -mu2, -p2, -Number, -Date, -Treatment, -TreatCode, 
-                                                 -Time, -Plant) %>%
-  dplyr::filter(., complete.cases(.))
-str(datalasso)
-
-## Glmnet wants the data to be matrices, not data frames.
-x_train <- datalasso %>% dplyr::select(-p1, -Rep2, -mu1) %>% as.matrix()
-
-#########################################################################################################
-#### Elastic Net on attraction rates
-y_train <- datalasso[,"p1"] %>% as.matrix()
-
 ## Set up trainControl
 train_control = trainControl(method = "cv",
                              number = 5, returnResamp = "all",
                              savePredictions = "final")
 
+## Number of runs
+nrun <- 500
+
+
+#### Elastic Net of attraction rates 
+attrEnetData <- pptData %>% dplyr::filter(., complete.cases(.)) %>%
+  dplyr::select(logp1, PD_symptoms_index, 10:ncol(pptData)) 
+
 #### Create a custom tuning grid.
 ## Find max lambda for cross validation
 ## Formula found here: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
 ## Need to center and scale predictors first
-xenet <- enetTransdata %>% dplyr::select(-test_plant_infection) %>% scale(., center = TRUE, scale = TRUE)
-yenet <- ifelse(enetTransdata$test_plant_infection == "infected", 1, 0)
+xenet <- attrEnetData %>% dplyr::select(-logp1) %>%
+  scale(., center = TRUE, scale = TRUE)
+yenet <- attrEnetData$logp1 %>% as.numeric()
 lambdaMax <- apply(xenet, 2, function(x) sum(yenet*x)) %>% max()
 ## set upper limit for lamba range based on lambdaMax and alpha
 ## from this website: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
@@ -557,9 +871,7 @@ for(i in 1:length(alphas)){
 enet_grid <- enetTuneList %>% rbindlist() %>% as.data.frame()
 
 ## Run cross-validation once
-enet = train(x_train, y_train, method = "glmnet",
-             metric = "ROC",
-             preProcess = c("center", "scale"),
+enet = train(xenet, yenet, method = "glmnet",
              tuneGrid = enet_grid,
              trControl = train_control)
 print(enet)
@@ -567,57 +879,189 @@ plot(enet)
 enet$bestTune
 (enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
 
-enet3 <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
-                             alpha = enet$bestTune$alpha, lambda = lambdas)
-(enetResults3 <- coef(enet3, s = enet$bestTune$lambda))
 
 
 #### The cva.glmnet and caret results largely match up
 #### Results are highly variable across CV runs. Need to run CV multiple times and average coefficient results
 ## Run caret::train() through for loop
 
-## Number of runs
-nrun <- 500
 
 ## Empty vectors for coefficients and best tune parameters
 enetResultsList <- enetBestTuneList <- vector("list", nrun)
 
 for(i in 1:nrun){
-  enetTrain = train(x_train, y_train, method = "glmnet",
-                    metric = "ROC",
-                    preProcess = c("center", "scale"),
+  enetTrain = train(xenet, yenet, method = "glmnet",
+                    metric = "RMSE",
                     tuneGrid = enet_grid,
                     trControl = train_control)
   enetBestTuneList[[i]] <- enetTrain$bestTune
-  enet <- glmnetUtils::glmnet(test_plant_infection ~ ., data = enetTransdata, family = "binomial",
-                              alpha = enetTrain$bestTune$alpha, lambda = lambdas)
-  enetResultsList[[i]] <- as.data.frame(t(as.matrix(coef(enet, s = enetTrain$bestTune$lambda))))
+  enetResultsList[[i]] <- as.data.frame(t(as.matrix(coef(enetTrain$finalModel, s = enetTrain$bestTune$lambda))))
 }
 
+saveRDS(list(enetBestTuneList, enetResultsList), file = "output/elastic_net_attraction_chemistry_multiple_runs_results.rds")
+
+enetList <- readRDS("output/elastic_net_attraction_chemistry_multiple_runs_results.rds")
+enetBestTuneList <- enetList[[1]]
+enetResultsList <- enetList[[2]]
+
 ## Combine and summarize best tuning parameters
-enetBestTune17 <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
-hist(enetBestTune17$alpha)
-hist(enetBestTune17$lambda)
+enetBestTuneAttr <- enetBestTuneList %>% rbindlist() %>% as.data.frame()
+hist(enetBestTuneAttr$alpha)
+hist(enetBestTuneAttr$lambda)
 ## Get mode of alpha and lambda
-modeTune17 <- apply(enetBestTune17, 2, mfv)
+(modeTuneAttr <- apply(enetBestTuneAttr, 2, mfv) %>% t() %>% as.data.frame())
 
 #### Combine runs and summarize coefficient estimates
 enetResultsData <- enetResultsList %>% rbindlist() %>% as.data.frame()
-enetSummary17 <- data.frame(meancoef = apply(enetResultsData, 2, mean),
-                            mediancoef = apply(enetResultsData, 2, median),
-                            sdcoef = apply(enetResultsData, 2, sd))
+enetSummaryAttr <- data.frame(compounds = c("Intercept", attr(xenet, "dimnames")[[2]]),
+                              meancoef = apply(enetResultsData, 2, mean),
+                              mediancoef = apply(enetResultsData, 2, median),
+                              sdcoef = apply(enetResultsData, 2, sd))
+enetSummaryAttr %>% arrange(abs(meancoef))
+
+#### Plot Elastic Net results
+## Reduce the number of compounds for plotting, and remove Intercept because it inflates the scale
+plotAttrData <- enetSummaryAttr %>% dplyr::filter(compounds != "Intercept" & abs(mediancoef) > 0)
+## Vector of clear names for covariates
+levels(plotAttrData$compounds)
+## Reorder factor levels according to coefficient estimate
+plotAttrData$compounds <- with(plotAttrData, factor(compounds, levels = compounds[order(meancoef, decreasing = FALSE)]))
+levels(plotAttrData$compounds)
+
+
+attrEnetPlot <- ggplot(plotAttrData, aes(y = compounds, x = meancoef)) +
+  geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
+  geom_point(size = 3) +
+  geom_vline(linetype = "longdash", xintercept = 0) +
+  scale_x_continuous("Coefficient estimate", limits = c(-0.2,0.1),
+                     labels = c(-0.2,-0.1,0,0.1),
+                     breaks = c(-0.2,-0.1,0,0.1)) +
+  #scale_y_discrete(labels = NULL, name = NULL) +
+  theme_bw() + 
+  theme(axis.line = element_line(colour = "black"),
+        text = element_text(size = 16),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+attrEnetPlot
+
+ggsave(filename = "results/figures/2017_figures/attraction_chemistry_elastic_net_coefficients_plot.tiff", 
+       plot = attrEnetPlot,
+       width = 7, height = 7, units = "in")
+
+
+
+#### Which compounds were selected by both PCR and Elastic Net for attraction?
+loadings2selected <- loadings2 %>% dplyr::filter(loadings >= 0.1)
+plotAttrData[plotAttrData$compounds %in% loadings2selected$compounds,]
+loadings2selected[loadings2selected$compounds %in% plotAttrData$compounds,]
 
 
 
 
+#### Elastic Net of leaving rates 
+leaveEnetData <- pptData %>% dplyr::filter(., complete.cases(.)) %>%
+  dplyr::select(logmu1, PD_symptoms_index, 10:ncol(pptData))
+
+#### Create a custom tuning grid.
+## Find max lambda for cross validation
+## Formula found here: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+## Need to center and scale predictors first
+xenet <- leaveEnetData %>% dplyr::select(-logmu1) %>%
+  scale(., center = TRUE, scale = TRUE)
+yenet <- leaveEnetData$logmu1 %>% as.numeric()
+lambdaMax <- apply(xenet, 2, function(x) sum(yenet*x)) %>% max()
+## set upper limit for lamba range based on lambdaMax and alpha
+## from this website: https://stats.stackexchange.com/questions/144994/range-of-lambda-in-elastic-net-regression
+alphas = seq(0, 1, by = 0.1)
+lambdaMaxAdj <- 1/(1-alphas)*lambdaMax
+lambdaMaxAdj[lambdaMaxAdj == Inf] <- max(lambdaMaxAdj[lambdaMaxAdj != Inf])
+enetTuneList <- vector("list", length(alphas))
+for(i in 1:length(alphas)){
+  enetTuneList[[i]] <- expand.grid(alpha = alphas[i], 
+                                   lambda = seq(0, lambdaMaxAdj[i], length.out = 20))
+}
+enet_grid <- enetTuneList %>% rbindlist() %>% as.data.frame()
+
+## Run cross-validation once
+enet = train(xenet, yenet, method = "glmnet",
+             tuneGrid = enet_grid,
+             trControl = train_control)
+print(enet)
+plot(enet)
+enet$bestTune
+(enetResults2 <- coef(enet$finalModel, s = enet$bestTune$lambda))
 
 
+#### Results are highly variable across CV runs. Need to run CV multiple times and average coefficient results
+## Run caret::train() through for loop
 
 
+## Empty vectors for coefficients and best tune parameters
+enetResultsList2 <- enetBestTuneList2 <- vector("list", nrun)
+
+for(i in 1:nrun){
+  enetTrain = train(xenet, yenet, method = "glmnet",
+                    metric = "RMSE",
+                    tuneGrid = enet_grid,
+                    trControl = train_control)
+  enetBestTuneList2[[i]] <- enetTrain$bestTune
+  enetResultsList2[[i]] <- as.data.frame(t(as.matrix(coef(enetTrain$finalModel, s = enetTrain$bestTune$lambda))))
+}
+
+saveRDS(list(enetBestTuneList2, enetResultsList2), file = "output/elastic_net_leaving_chemistry_multiple_runs_results.rds")
+
+enetList <- readRDS("output/elastic_net_leaving_chemistry_multiple_runs_results.rds")
+enetBestTuneList2 <- enetList[[1]]
+enetResultsList2 <- enetList[[2]]
+
+## Combine and summarize best tuning parameters
+enetBestTuneleave <- enetBestTuneList2 %>% rbindlist() %>% as.data.frame()
+hist(enetBestTuneleave$alpha)
+hist(enetBestTuneleave$lambda)
+## Get mode of alpha and lambda
+modeTuneleave <- apply(enetBestTuneleave, 2, mfv) %>% t() %>% as.data.frame()
+
+#### Combine runs and summarize coefficient estimates
+enetResultsData <- enetResultsList2 %>% rbindlist() %>% as.data.frame()
+enetSummaryleave <- data.frame(compounds = c("Intercept", attr(xenet, "dimnames")[[2]]),
+                              meancoef = apply(enetResultsData, 2, mean),
+                              mediancoef = apply(enetResultsData, 2, median),
+                              sdcoef = apply(enetResultsData, 2, sd))
+enetSummaryleave %>% arrange(abs(meancoef))
 
 
+#### Plot Elastic Net results
+## Reduce the number of compounds for plotting, and remove Intercept because it inflates the scale
+plotleaveData <- enetSummaryleave %>% dplyr::filter(compounds != "Intercept" & abs(mediancoef) > 0)
+## Vector of clear names for covariates
+levels(plotleaveData$compounds)
+## Reorder factor levels according to coefficient estimate
+plotleaveData$compounds <- with(plotleaveData, factor(compounds, levels = compounds[order(meancoef, decreasing = FALSE)]))
+levels(plotleaveData$compounds)
 
 
+leaveEnetPlot <- ggplot(plotleaveData, aes(y = compounds, x = meancoef)) +
+  geom_errorbarh(aes(xmin = meancoef-sdcoef, xmax = meancoef+sdcoef), colour = "black", height = 0.2) +
+  geom_point(size = 3) +
+  geom_vline(linetype = "longdash", xintercept = 0) +
+  xlab("Coefficient estimate") +
+  #scale_y_discrete(labels = NULL, name = NULL) +
+  theme_bw() + 
+  theme(axis.line = element_line(colour = "black"),
+        text = element_text(size = 8),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank()) 
+
+leaveEnetPlot
+
+ggsave(filename = "results/figures/2017_figures/leaving_chemistry_elastic_net_coefficients_plot.tiff", 
+       plot = leaveEnetPlot,
+       width = 7, height = 14, units = "in")
 
 
 

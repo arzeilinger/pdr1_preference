@@ -95,7 +95,7 @@ any(grep("^[[:digit:]]", names(chemData)))
 #### Save data set of all chemistry data
 saveRDS(chemData, "output/full_phenolic_and_volatile_data_pdr1_2017.rds")
 
-
+chemData <- readRDS("output/full_phenolic_and_volatile_data_pdr1_2017.rds")
 #### I'm pretty sure one observation of Res = s, Week = 5, Treatment = Both should be Res = r....
 ## Try to figure out which one
 ## Try to look at residuals for all compounds
@@ -112,3 +112,50 @@ which(sumResiduals == max(sumResiduals))
 ## Total squared residuals of Rep 9 is much larger than other replicates across all other reps
 ## Rep 9 might be the incorrectly labeled rep
 
+#### Check distribution of residuals from R plants
+compObs <- chemData %>% dplyr::filter(Week == 5 & Res == "r" & Treatment == "Both") %>% 
+  dplyr::select(10:ncol(chemData))
+compMeans <- colMeans(compObs)
+compResiduals <- matrix(ncol = ncol(compObs), nrow = nrow(compObs))
+for(i in 1:ncol(compResiduals)){
+  compResiduals[,i] <- (compObs[,i] - compMeans[i])^2
+}
+sumCompResiduals <- rowSums(compResiduals, na.rm = TRUE)
+hist(sumCompResiduals)
+which(sumCompResiduals == max(sumCompResiduals))
+
+
+#### Examining which other replicates are missing
+missingReps <- chemData %>% dplyr::filter(Treatment == "Both")
+with(missingReps, table(Rep, Week, Res))
+## I think Rep 9 Susceptible should be Rep 5 Resistant
+
+
+# #### Rename Rep 9 Susceptible to Rep 5 Resistant
+# for(i in 1:nrow(chemData)){
+#   if(chemData[i, "Rep"] == 9){
+#     chemData[i, "Rep"] <- 5
+#     chemData[i, "Res"] <- "r"
+#   }
+# }
+
+
+#### Remove Rep 9
+chemData <- chemData %>% dplyr::filter(Rep != 9)
+## Check missing reps again
+missingReps <- chemData %>% dplyr::filter(Treatment == "Both")
+with(missingReps, table(Rep, Week, Res))
+
+#### Save chemistry data
+saveRDS(chemData, "output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+
+
+#### How many pre-trial samples do I have?
+chemData <- readRDS("output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+chemData %>% dplyr::filter(Treatment == "BothPre") %>% with(., table(Week, Res))
+## Not many
+
+## How does pre- and post-trial compare?
+prePostTotalPhenolics <- chemData %>% dplyr::filter(Treatment == "BothPre" | Treatment == "Both") %>%
+  dplyr::select(Week, Res, Rep, Treatment, total.phenolics.leaf) %>%
+  spread(key = Treatment, value = total.phenolics.leaf)

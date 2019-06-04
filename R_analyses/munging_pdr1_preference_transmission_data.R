@@ -361,5 +361,8 @@ phenPrefTransData %>% dplyr::filter(is.na(total.phenolics.stem)) %>% dplyr::sele
 phenPrefTransData %>% dplyr::filter(is.na(total.volatiles)) %>% dplyr::select(1:5) %>% print.data.frame
 ## week 2 block 1 was never measured, 3 other points missing from phenolic data and 5 others missing from volatile data
 
+## Check missing reps again
+with(phenPrefTransData, table(rep, week, genotype))
+
 ## Save final data set
 saveRDS(phenPrefTransData, file = "output/chemistry_preference_transmission_dataset.rds")
