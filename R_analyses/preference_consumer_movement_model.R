@@ -41,6 +41,14 @@ prefdata <- prefdata[,1:12]
 prefdata$cage <- paste(prefdata$trt, prefdata$rep, sep = "")
 head(prefdata)
 
+## Calculate number of dead BGSS
+lastobs <- prefdata %>% dplyr::filter(time_from_start_hr == 192 & week != 12.2)
+with(lastobs, table(week, trt))
+totaldead <- sum(lastobs$dead, na.rm = TRUE)
+totalbugs <- 48*8
+## Proportion of bugs that died
+totaldead/totalbugs
+  
 # Checking out weirdness in S3 trial data
 s3prefdata <- dplyr::filter(prefdata, week == 3, trt == "S")
 dplyr::filter(s3prefdata, time_from_start_hr == 1 | time_from_start_hr == 2)

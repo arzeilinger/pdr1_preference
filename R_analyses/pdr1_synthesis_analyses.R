@@ -565,8 +565,9 @@ ggsave("results/figures/2017_figures/total_phytochemicals_timeseries_plot.jpg", 
 pptData <- pptData %>% dplyr::select(-contains("total"), -monoterpenoids, -green.leafy.volatiles,
                                      -isoprenoids.and.related, -sequiterpenoids, -early.unknowns, -late.unknowns)
 
+
 #### PCA ordination plots for each time point
-figList <- pcaWeekList <- pptWeekData <- vector("list", length(unique(pptData$week)))
+figList <- pcaWeekList <- pptWeekData <- pcaANOVAList <- goodPCscores <- pvaluesList <- vector("list", length(unique(pptData$week)))
 
 for(i in 1:length(unique(pptData$week))){
   pptData.i <- pptData %>% 
@@ -575,14 +576,67 @@ for(i in 1:length(unique(pptData$week))){
     dplyr::filter(., complete.cases(.))
   pptWeekData[[i]] <- pptData.i
   chemVars.i <- pptData.i %>% 
-    dplyr::select(which(names(pptData.i) == "protocatechuic.acid.hexoside"):ncol(pptData.i)) %>% 
-    dplyr::select(-contains("total"))
+    dplyr::select(which(names(pptData.i) == "protocatechuic.acid.hexoside"):ncol(pptData.i))
   pcaWeekList[[i]] <- prcomp(chemVars.i, scale = TRUE)
-  figList[[i]] <- ggbiplot(pcaWeekList[[i]], choices = 1:2, obs.scale = 1, var.scale = 1, groups = pptData.i$trt, 
+  pcaVar.i <- pcaWeekList[[i]]$sdev^2
+  # Proportion variance explained
+  pve.i <- pcaVar.i/sum(pcaVar.i)
+  print(paste("week == ", unique(pptData$week)[i]))
+  print(pve.i)
+  # Cummulative variance explained vs. PC
+  cumpve.i <- cumsum(pve.i)
+  ## Select PCs that explain a cumulative 95% of variance
+  goodPCindex.i <- which(round(cumpve.i, digits = 2) <= 0.99)
+  goodPCscores.i <- as.data.frame(pcaWeekList[[i]]$x[,goodPCindex.i])
+  goodPCscores[[i]] <- names(goodPCscores.i)
+  ## cbind good PCs to dat
+  pcregData.i <- cbind(pptData.i, goodPCscores.i)
+  print(names(pcregData.i))
+  #### Run ANOVAs in a loop
+  pcaANOVAList[[i]] <- vector("list", length(goodPCindex.i))
+  for(j in 1:length(goodPCindex.i)){
+    pc.j <- names(goodPCscores.i)[j]
+    anova.j <- aov(pcregData.i[,which(names(pcregData.i) == pc.j)] ~ trt, data = pcregData.i)
+    pcaANOVAList[[i]][[j]] <- summary(anova.j)
+    #print(pc.j)
+    #print(pcaANOVAList[[i]][[j]])
+  }
+}  
+  
+#aovweek14list <- pcaANOVAList[[4]]
+
+for(i in 1:length(unique(pptData$week))){
+  pcaANOVAList.i <- pcaANOVAList[[i]]
+  pvalues <- sapply(1:length(pcaANOVAList.i), function(x) pcaANOVAList.i[[x]][[1]][1,"Pr(>F)"], simplify = TRUE)  
+  pvaluesList[[i]] <- pvalues
+  #goodPCscores.i <- goodPCscores[[i]]
+  #goodPCscores.i <- as.data.frame(cbind(goodPCscores.i, pvalues))
+  #goodPCscores.i$pvalues <- factor2numeric(goodPCscores.i$pvalues)
+  nsig <- sum(pvalues < 0.07)
+  pvaluesIndexSorted <- order(pvalues)
+  sigpvals.i <- c(NA, NA)
+  if(nsig == 0){
+    sigpvals.i <- 1:2
+  }
+  if(nsig == 1 & pvaluesIndexSorted[1] != 1){
+    sigpvals.i <- c(pvaluesIndexSorted[1], 1)
+  }
+  if(nsig >= 2){
+    sigpvals.i <- pvaluesIndexSorted[1:2]
+  }
+  #goodPCscores[[i]] <- as.data.frame(cbind(goodPCscores[[i]], pvalues))
+  figList[[i]] <- ggbiplot(pcaWeekList[[i]], choices = sigpvals.i, obs.scale = 1, var.scale = 1, groups = pptWeekData[[i]]$trt, 
                            ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95, var.axes = FALSE,
                            theme(axis.line = element_line(colour = "black"),
-                                 text = element_text(size = 12)))
+                                 text = element_text(size = 12),
+                                 legend.position = "none"))
 }
+
+
+
+  
+  
+
 
 pcaWeekFigure <- plot_grid(figList[[1]], figList[[2]], figList[[3]], figList[[4]],
                            align = "h", ncol = 2, nrow = 2, 
