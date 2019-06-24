@@ -9,6 +9,9 @@ lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
 
+#### For CMM parameters
+## choice1 = source (Xylella infected) plant
+## choice2 = test plant
 
 
 #############################################################################################################
@@ -582,7 +585,7 @@ for(i in 1:length(unique(pptData$week))){
   # Proportion variance explained
   pve.i <- pcaVar.i/sum(pcaVar.i)
   print(paste("week == ", unique(pptData$week)[i]))
-  print(pve.i)
+  print(round(pve.i, 3))
   # Cummulative variance explained vs. PC
   cumpve.i <- cumsum(pve.i)
   ## Select PCs that explain a cumulative 95% of variance
@@ -591,7 +594,7 @@ for(i in 1:length(unique(pptData$week))){
   goodPCscores[[i]] <- names(goodPCscores.i)
   ## cbind good PCs to dat
   pcregData.i <- cbind(pptData.i, goodPCscores.i)
-  print(names(pcregData.i))
+  #print(names(pcregData.i))
   #### Run ANOVAs in a loop
   pcaANOVAList[[i]] <- vector("list", length(goodPCindex.i))
   for(j in 1:length(goodPCindex.i)){
@@ -609,9 +612,6 @@ for(i in 1:length(unique(pptData$week))){
   pcaANOVAList.i <- pcaANOVAList[[i]]
   pvalues <- sapply(1:length(pcaANOVAList.i), function(x) pcaANOVAList.i[[x]][[1]][1,"Pr(>F)"], simplify = TRUE)  
   pvaluesList[[i]] <- pvalues
-  #goodPCscores.i <- goodPCscores[[i]]
-  #goodPCscores.i <- as.data.frame(cbind(goodPCscores.i, pvalues))
-  #goodPCscores.i$pvalues <- factor2numeric(goodPCscores.i$pvalues)
   nsig <- sum(pvalues < 0.07)
   pvaluesIndexSorted <- order(pvalues)
   sigpvals.i <- c(NA, NA)
@@ -624,18 +624,12 @@ for(i in 1:length(unique(pptData$week))){
   if(nsig >= 2){
     sigpvals.i <- pvaluesIndexSorted[1:2]
   }
-  #goodPCscores[[i]] <- as.data.frame(cbind(goodPCscores[[i]], pvalues))
   figList[[i]] <- ggbiplot(pcaWeekList[[i]], choices = sigpvals.i, obs.scale = 1, var.scale = 1, groups = pptWeekData[[i]]$trt, 
                            ellipse = TRUE, circle = FALSE, ellipse.prob = 0.95, var.axes = FALSE,
                            theme(axis.line = element_line(colour = "black"),
                                  text = element_text(size = 12),
                                  legend.position = "none"))
 }
-
-
-
-  
-  
 
 
 pcaWeekFigure <- plot_grid(figList[[1]], figList[[2]], figList[[3]], figList[[4]],
@@ -649,6 +643,48 @@ ggsave(filename = "results/figures/2017_figures/chemistry_pca_weeks_plots.tiff",
        plot = pcaWeekFigure,
        width = 30, height = 30, units = "cm", dpi = 300, compression = "lzw")
 
+
+
+##############################################################################################
+#### Look at the PCA loadings for week 8
+PCloadings8 <- pcaWeekList[[3]]$rotation
+pptDataWeek8 <- pptWeekData[[3]]
+
+## PC4 loadings
+loadings4 <- data.frame(compounds = attr(PCloadings8[,4], "names"),
+                        loadings = as.numeric(PCloadings8[,4]))
+loadings4 %>% arrange(-loadings)
+
+
+## Make sure I'm interpreting the loadings correctly
+(chem8Means <- pptDataWeek8 %>% 
+    group_by(trt) %>% 
+    ## First two compounds should be greater in R (negative loadings); last two compounds should be greater in S (positive loadings)
+    summarise_at(c("procyanidin.B.gallate.2", "epicatechin.gallate", "quercitrin", "malvidin.glucoside.oenin"), 
+                 list(~mean(.), se = ~sd(.)/sqrt(length(.)))))
+
+##############################################################################################
+#### Look at the PCA loadings for week 14
+PCloadings14 <- pcaWeekList[[4]]$rotation
+pptDataWeek14 <- pptWeekData[[4]]
+
+## PC1 loadings
+loadings1 <- data.frame(compounds = attr(PCloadings14[,1], "names"),
+                        loadings = as.numeric(PCloadings14[,1]))
+loadings1 %>% arrange(-loadings)
+
+## PC2 loadings
+loadings2 <- data.frame(compounds = attr(PCloadings14[,2], "names"),
+                        loadings = as.numeric(PCloadings14[,2]))
+loadings2 %>% arrange(-loadings)
+
+
+## Make sure I'm interpreting the loadings correctly
+(chem14Means <- pptDataWeek14 %>% 
+    group_by(trt) %>% 
+    ## First three compounds should be greater in R (negative loadings); last compound should be greater in S (positive loadings)
+    summarise_at(c("coutaric.acid.1", "deltaviniferin", "piceid", "geraniol"), 
+                 list(~mean(.), se = ~sd(.)/sqrt(length(.)))))
 
 ###########################################################################################################
 #### PC REGRESSION

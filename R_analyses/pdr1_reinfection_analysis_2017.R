@@ -254,3 +254,40 @@ meaninoc2plot
 ggsave("results/figures/2017_figures/reinfection_inoc2_line_plot_2017.jpg", plot = meaninoc2plot,
        width = 7, height = 7, units = "in")
 
+
+
+####################################################################################################
+#### Cleaning up data set for Chris Wallis
+
+pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
+                      visibility = "private")
+reinfdataGS <- gs_read(pdr1DataURL, ws = "Re-infection_culturing_data")
+
+
+reinfdata <- reinfdataGS
+str(reinfdata)
+summary(reinfdata)
+# Make xf_cfu_per_g a numeric variable and genotype and trt factors
+reinfdata$xf_cfu_per_g <- as.numeric(reinfdata$xf_cfu_per_g)
+reinfdata$genotype <- factor(reinfdata$genotype)
+reinfdata$trt <- factor(reinfdata$trt)
+summary(reinfdata)
+
+#### Where are the NAs?
+reinfdata[is.na(reinfdata$xf_cfu_per_g),]
+# NAs for xf_cfu_per_g are mostly controls and dead plants
+# For sample 9-007S-4, xf_cfu_d0 was too contaminated but d1 and d2 were 0 could be imputed, but I'll remove it
+
+## For Chris' analysis, he only needs genotypes 092 and 094, as these were the only to get assayed for phytochemistry 
+## Also remove unnecessary columns
+reinfdataCW <- reinfdata %>% 
+  dplyr::filter(., genotype == "092" | genotype == "094") %>%
+  dplyr::select(week, genotype, trt, rep, xf_plant_date_cultured, xf_cfu_per_g, notes)
+
+#### Label infection treatments according to reps
+reinfdataCW$inoc.time <- factor(with(reinfdataCW, ifelse(rep <= 4, "inoc1",
+                                                         ifelse(rep >= 9, "inoc2",
+                                                                "inoc1-2"))))
+summary(reinfdataCW)
+
+write.csv(reinfdataCW, "output/xf_populations_for_Chris.csv", row.names = FALSE)

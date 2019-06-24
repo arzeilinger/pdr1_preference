@@ -366,3 +366,21 @@ with(phenPrefTransData, table(rep, week, genotype))
 
 ## Save final data set
 saveRDS(phenPrefTransData, file = "output/chemistry_preference_transmission_dataset.rds")
+
+
+
+####################################################################################################################
+#### Produce data set of xf pops and PD symptoms for Chris
+
+#### Load transmission/acquisition/culturing/preference data set if not already loaded
+transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
+str(transVCPdata)
+with(transVCPdata, table(week, genotype))
+
+## Remove unnecessary columns
+transVCPdataCW <- transVCPdata %>% 
+  dplyr::select(-nbugs, -totalInfectious, -propInfectious, -mu1, -mu2, -p1, -p2) %>%
+  dplyr::filter(genotype == "092" | genotype == "094")
+str(transVCPdataCW)
+
+write.csv(transVCPdataCW, "output/transmission_experiment_data_for_Chris.csv", row.names = FALSE)
