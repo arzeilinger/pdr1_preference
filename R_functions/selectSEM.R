@@ -5,20 +5,6 @@ selectSEM <- function(dat){
   ## returns Fisher's C statistics and AICc values
   ## models are ordered by no. parameters in descending order
   require(piecewiseSEM)
-  ## directPrefModel = additional direct links between feeding preference and transmission
-  directPrefModel <- psem(
-    glm(transmission ~ acquisition + p2 + mu2 + p1 + mu1, "binomial", dat),
-    lm(acquisition ~ p1 + mu1 + XylellaPopulation, dat),
-    lm(p1 ~ pd_index, dat),
-    lm(mu1 ~ pd_index, dat),
-    lm(XylellaPopulation ~ resistanceTrait + week, dat),
-    lm(pd_index ~ resistanceTrait + XylellaPopulation, dat),
-    p1 %~~% mu2,
-    p2 %~~% mu1,
-    p1 %~~% p2,
-    mu1 %~~% mu2
-  )
-  outputDirectPref <- summary(directPrefModel, .progressBar = FALSE)
   ## transModel = best hypothesis on processes driving transmission
   transModel <- psem(
     glm(transmission ~ acquisition + p2 + mu2, "binomial", dat),
@@ -33,6 +19,18 @@ selectSEM <- function(dat){
     mu1 %~~% mu2
   )
   outputTrans <- summary(transModel, .progressBar = FALSE)
+  ## noPDModel = transModel without PD index
+  noPDModel <- psem(
+    glm(transmission ~ acquisition + p2 + mu2, "binomial", dat),
+    lm(acquisition ~ p1 + mu1 + XylellaPopulation, dat),
+    lm(XylellaPopulation ~ resistanceTrait + week, dat),
+    p1 %~~% mu2,
+    p2 %~~% mu1,
+    p1 %~~% p2,
+    mu1 %~~% mu2,
+    pd_index ~ 1
+  )
+  outputNoPD <- summary(noPDModel, .progressBar = FALSE)
   ## attractModel = only attraction rates, no leaving rates included
   attractModel <- psem(
     glm(transmission ~ acquisition + p2, "binomial", dat),
@@ -79,14 +77,15 @@ selectSEM <- function(dat){
     pd_index ~ 1
   )
   outputNoPref <- summary(noPrefModel, .progressBar = FALSE)
-  outputList <- list(outputDirectPref, outputTrans, outputAttract, outputAttract2, outputLeave, outputNoPref)
-  names(outputList) <- c("directPrefModel", "transModel", "attractModel", "attractModel2", "leaveModel", "noPrefModel")
+  outputList <- list(outputTrans, outputNoPD, outputAttract, outputAttract2, outputLeave, outputNoPref)
+  modelNames <- c("transModel", "noPDModel", "attractModel", "attractModel2", "leaveModel", "noPrefModel")
+  names(outputList) <- modelNames
   aiccScores <- sapply(1:length(outputList), function(x) outputList[[x]]$IC$AICc, simplify = TRUE)
   daicc <- aiccScores - min(aiccScores)
   FCstat <- sapply(1:length(outputList), function(x) outputList[[x]]$Cstat$Fisher.C, simplify = TRUE)
   FCn <- sapply(1:length(outputList), function(x) outputList[[x]]$Cstat$df, simplify = TRUE)
   FCp <- sapply(1:length(outputList), function(x) outputList[[x]]$Cstat$P.Value, simplify = TRUE)
-  results <- data.frame(models = c("directPrefModel", "transModel", "attractModel", "attractModel2", "leaveModel", "noPrefModel"),
+  results <- data.frame(models = modelNames,
                         aiccScores,
                         daicc,
                         FCstat,

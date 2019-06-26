@@ -248,5 +248,5 @@ str(semData17)
 modelSelect17 <- selectSEM(semData17)
 (results17 <- modelSelect17[[1]])
 
-## Best model is attractModel2; attraction rates without pd_index
-modelSelect17[[2]]$attractModel2
+## Best model is noPDModel; attraction and leaving rates without pd_index
+modelSelect17[[2]]$noPDModel
