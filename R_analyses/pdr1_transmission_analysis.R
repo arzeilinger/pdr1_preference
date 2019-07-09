@@ -2,8 +2,9 @@
 
 rm(list = ls())
 # Load packages
-my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "MASS", "googlesheets",
-                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "cowplot", "broom")
+my.packages <- c("data.table", "openxlsx", "MASS", "googlesheets",
+                 "lme4", "ggplot2", "bbmle", "multcomp", "DHARMa", "cowplot", "broom",
+                 "rms", "tidyr", "dplyr")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -438,6 +439,10 @@ ggsave("results/figures/2016_figures/acquisition_non-linear_color_plot_2016.jpg"
 #### Non-linear models of transmission
 ##############################################################################################################
 
+#### Summarize transmission: mean transmission between trt
+transdata %>% group_by(trt) %>% summarise(mean = mean(test.plant.infection, na.rm = TRUE))
+
+
 # Setting up data
 transSummarynl16 <- transdata %>% group_by(week, trt) %>% 
   summarise(n = length(test.plant.infection),
@@ -672,9 +677,11 @@ symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
         panel.background = element_blank(),
-        legend.position = "none") 
+        legend.justification = c(0,0),
+        legend.position = c(0.1, 0.4))
 
 symptom17plot
+
 ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = symptom17plot,
        width = 7, height = 7, units = "in")
 
@@ -958,6 +965,10 @@ saveWorkbook(wb, file = "results/nl_model_vector_acquisition_results_tables_both
 #### Fitting non-linear models to transmission data
 ##############################################################################################################
 
+#### Summarize transmission: mean transmission between trt
+transVCPdata %>% group_by(trt) %>% summarise(mean = mean(test_plant_infection, na.rm = TRUE))
+
+
 # Setting up data
 transSummarynl17 <- transdata2 %>% group_by(week, trt) %>% 
   summarise(n = length(test_plant_infection),
@@ -1153,3 +1164,4 @@ addWorksheet(wb, sheetName = "nl_parameter_estimates")
 writeData(wb, sheet = "nl_parameter_estimates", x = nlParamTable, startCol = 2, startRow = 2)
 
 saveWorkbook(wb, file = "results/nl_model_transmission_results_tables_both_years.xlsx", overwrite = TRUE)
+

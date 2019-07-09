@@ -332,9 +332,8 @@ saveRDS(transVCPdata, file = "output/complete_2017_transmission-preference_datas
 transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
 
 ## Filter phenolic data set to only Treatment == "Both" as these correspond to the xf_plants or source plants in the trials
-## Chemistry data includes phenolics and volatiles, but continue to call it "phenData"
-## Chemistry data does not include volatiles from stems because there were too many missing observations
-phenData <- readRDS("output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+## Chemistry data includes phenolics only, did not merge volatile data
+phenData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
 phenData <- phenData %>% dplyr::filter(Treatment == "Both")
 phenData$Rep <- as.numeric(phenData$Rep)
 # Make "Res" groups capitalized
@@ -358,7 +357,6 @@ with(phenPrefTransData, table(genotype, week))
 summary(phenPrefTransData)
 
 phenPrefTransData %>% dplyr::filter(is.na(total.phenolics.stem)) %>% dplyr::select(1:5) %>% print.data.frame
-phenPrefTransData %>% dplyr::filter(is.na(total.volatiles)) %>% dplyr::select(1:5) %>% print.data.frame
 ## week 2 block 1 was never measured, 3 other points missing from phenolic data and 5 others missing from volatile data
 
 ## Check missing reps again

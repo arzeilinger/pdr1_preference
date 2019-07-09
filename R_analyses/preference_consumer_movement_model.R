@@ -249,6 +249,37 @@ ggsave(file = "results/figures/2016_figures/pdr1_cmm_rate_parameter_plot_2016.jp
 
 
 #####################################################################################
+#### Plot raw numbers of bugs over time
+plotCounts16 <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
+  dplyr::select(-n1, -n2, -n3, -t, -N) %>% 
+  gather(., key = "choice", value = "proportion", xf_plant, test_plant)
+
+## Change choice names to "infected" and "xf-free"
+plotCounts16$choice <- ifelse(plotCounts16$choice == "xf_plant", "infected", "xf_free")
+
+bgss_counts_plot16 <- ggplot(data=plotCounts16, aes(x=time_from_start_hr, y=proportion, group = choice)) +
+  geom_line(aes(colour = choice), size=1.25) +
+  #geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
+  #geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
+  facet_grid(trt~week, scales = "fixed") +
+  scale_color_manual(values = my_palette) +
+  scale_x_continuous(name = "Time from start (hr)") + 
+  scale_y_continuous(name = "Proportion of vectors") +
+  #limits = c(0,10)) +
+  theme_bw(base_size=18) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(colour = "black"),
+        panel.background = element_blank(),
+        strip.background = element_blank()) 
+
+bgss_counts_plot16
+
+ggsave("results/figures/2016_figures/pdr1_bgss_counts_time-series_plot_2016.jpg", plot = bgss_counts_plot16,
+       width = 14, height = 7, units = "in")
+
+#####################################################################################
 #### Equilibrial probabilities 
 #####################################################################################
 
@@ -658,32 +689,33 @@ ggsave("results/figures/2017_figures/pdr1_eq_probabilities_plot_2017.jpg", plot 
        width = 14, height = 7, units = "in")
 
 #### Plot raw numbers of bugs over time
-plotCounts <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
+plotCounts17 <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
   dplyr::select(-n1, -n2, -n3, -t, -N, -week.genotype) %>% 
   gather(., key = "choice", value = "proportion", xf_plant, test_plant)
 
 ## Change choice names to "infected" and "xf-free"
-plotCounts$choice <- ifelse(plotCounts$choice == "xf_plant", "infected", "xf_free")
+plotCounts17$choice <- ifelse(plotCounts17$choice == "xf_plant", "infected", "xf_free")
 
-bgss_counts_plot <- ggplot(data=plotCounts, aes(x=time_from_start_hr, y=proportion, group = choice)) +
+bgss_counts_plot17 <- ggplot(data=plotCounts17, aes(x=time_from_start_hr, y=proportion, group = choice)) +
   geom_line(aes(colour = choice), size=1.25) +
   #geom_point(aes(colour = choice), size=3.5, position = position_dodge(width = 0.9)) +
   #geom_errorbar(aes(ymax=ciu, ymin=cil), width=0.2, position = position_dodge(width = 0.9)) +
-  facet_grid(week~genotype, scales = "fixed") +
+  facet_grid(genotype~week, scales = "fixed") +
   scale_color_manual(values = my_palette) +
   scale_x_continuous(name = "Time from start (hr)") + 
-  scale_y_continuous(name = "Proportion of BGSS") +
+  scale_y_continuous(name = "Proportion of vectors") +
   #limits = c(0,10)) +
   theme_bw(base_size=18) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
+        panel.background = element_blank(),
+        strip.background = element_blank()) 
 
-bgss_counts_plot
+bgss_counts_plot17
 
-ggsave("results/figures/2017_figures/pdr1_bgss_counts_time-series_plot_2017.jpg", plot = bgss_counts_plot,
+ggsave("results/figures/2017_figures/pdr1_bgss_counts_time-series_plot_2017.jpg", plot = bgss_counts_plot17,
        width = 14, height = 7, units = "in")
 
 #### Example of a single BGSS count plot

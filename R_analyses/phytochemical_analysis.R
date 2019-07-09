@@ -34,6 +34,44 @@ table(stemPhenData$Treatment)
 stemPhenData$Treatment[stemPhenData$Treatment == "BothPost"] <- "Both"
 table(stemPhenData$Treatment)
 
+#### Update chemical compound list
+## Import sheet with updated names
+newChemNames <- read.xlsx("data/2017_data/BGSS Xylella Compound Table Final.xlsx")
+## Replace spaces in names with periods
+newChemNames$Old.Name <- gsub(" ", ".", newChemNames$Old.Name)
+newChemNames$Final.ID <- gsub(" ", ".", newChemNames$Final.ID)
+str(newChemNames)
+
+## Update leaf compounds
+newChemNamesLeaf <- newChemNames %>% dplyr::filter(Tissue == "leaf") %>% dplyr::select(Old.Name, Final.ID)
+namesToChangeLeaf <- names(leafPhenData)[names(leafPhenData) %in% newChemNamesLeaf$Old.Name]
+oldNamesPhenLeaf <- names(leafPhenData)
+for(i in 1:length(oldNamesPhenLeaf)){
+  if(oldNamesPhenLeaf[i] %in% newChemNamesLeaf$Old.Name){
+    oldName.i <- oldNamesPhenLeaf[i]
+    newName.i <- newChemNamesLeaf[newChemNamesLeaf$Old.Name == oldName.i, "Final.ID"]
+    oldNamesPhenLeaf[i] <- newName.i
+  }
+}
+cbind(oldNamesPhenLeaf, names(leafPhenData))
+names(leafPhenData) <- oldNamesPhenLeaf
+
+
+## Update stem compounds
+newChemNamesStem <- newChemNames %>% dplyr::filter(Tissue == "stem") %>% dplyr::select(Old.Name, Final.ID)
+namesToChangeStem <- names(stemPhenData)[names(stemPhenData) %in% newChemNamesStem$Old.Name]
+oldNamesPhenStem <- names(stemPhenData)
+for(i in 1:length(oldNamesPhenStem)){
+  if(oldNamesPhenStem[i] %in% newChemNamesStem$Old.Name){
+    oldName.i <- oldNamesPhenStem[i]
+    newName.i <- newChemNamesStem[newChemNamesStem$Old.Name == oldName.i, "Final.ID"]
+    oldNamesPhenStem[i] <- newName.i
+  }
+}
+cbind(oldNamesPhenStem, names(stemPhenData))
+names(stemPhenData) <- oldNamesPhenStem
+str(stemPhenData)
+
 phenData <- full_join(stemPhenData, leafPhenData, by = c("Number", "Week", "Date", "Treatment", "Res", "Rep"), suffix = c(".stem", ".leaf"))
 ## Need to fix some of the Treatment codes to correctly join data sets
 str(phenData)
@@ -51,23 +89,27 @@ with(phenData, table(Week, Res, Treatment))
 
 
 
-#### Load foliar and stem volatile data
-leafvolData <- read.xlsx("data/2017_data/Xylella_BGSS_Study_Volatiles_2019-05-09.xlsx", sheet = "Foliar Volatiles")
-stemvolData <- read.xlsx("data/2017_data/Xylella_BGSS_Study_Volatiles_2019-05-09.xlsx", sheet = "Wood Volatiles")
-str(leafvolData)  
-## Chris said that some observations are missing for stem volatiles because there wasn't enough tissue
-summary(stemvolData) ## Doesn't show NAs, observations were probably not entered into spreadsheet because all NA
-with(stemvolData, table(Week, Res, Treatment))
-with(leafvolData, table(Week, Res, Treatment))
-## Compare column names
-cbind(names(phenData)[1:10], names(leafvolData)[1:10], names(stemvolData)[1:10])
-## Looks like the important columns are all the same
+# #### Load foliar and stem volatile data
+# leafvolData <- read.xlsx("data/2017_data/Xylella_BGSS_Study_Volatiles_2019-05-09.xlsx", sheet = "Foliar Volatiles")
+# stemvolData <- read.xlsx("data/2017_data/Xylella_BGSS_Study_Volatiles_2019-05-09.xlsx", sheet = "Wood Volatiles")
+# str(leafvolData)  
+# ## Chris said that some observations are missing for stem volatiles because there wasn't enough tissue
+# summary(stemvolData) ## Doesn't show NAs, observations were probably not entered into spreadsheet because all NA
+# with(stemvolData, table(Week, Res, Treatment))
+# with(leafvolData, table(Week, Res, Treatment))
+# ## Compare column names
+# cbind(names(phenData)[1:10], names(leafvolData)[1:10], names(stemvolData)[1:10])
+# ## Looks like the important columns are all the same
+# 
+# 
+# #### Merge phenolic and volatile data
+# ## Don't include stem volatile data because of too many missing values
+# chemData <- full_join(phenData, leafvolData, by = c("Number", "Date", "Week", "Treatment", "Res", "Rep"))
+# with(chemData, table(Week, Res, Treatment))
 
 
-#### Merge phenolic and volatile data
-## Don't include stem volatile data because of too many missing values
-chemData <- full_join(phenData, leafvolData, by = c("Number", "Date", "Week", "Treatment", "Res", "Rep"))
-with(chemData, table(Week, Res, Treatment))
+#### Don't include volatile data
+chemData <- phenData
 ## Fixing column names
 ## Need to strip out parentheses from column names
 names(chemData) <- gsub(".(", ".", names(chemData), fixed = TRUE)
@@ -93,9 +135,9 @@ names(chemData)
 any(grep("^[[:digit:]]", names(chemData)))
 
 #### Save data set of all chemistry data
-saveRDS(chemData, "output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+saveRDS(chemData, "output/full_phenolic_data_pdr1_2017.rds")
 
-chemData <- readRDS("output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+chemData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
 #### I'm pretty sure one observation of Res = s, Week = 5, Treatment = Both should be Res = r....
 ## Try to figure out which one
 ## Try to look at residuals for all compounds
@@ -132,12 +174,12 @@ with(missingReps, table(Rep, Week, Res))
 
 
 # #### Rename Rep 9 Susceptible to Rep 5 Resistant
-# for(i in 1:nrow(chemData)){
-#   if(chemData[i, "Rep"] == 9){
-#     chemData[i, "Rep"] <- 5
-#     chemData[i, "Res"] <- "r"
-#   }
-# }
+for(i in 1:nrow(chemData)){
+  if(chemData[i, "Rep"] == 9){
+    chemData[i, "Rep"] <- 5
+    chemData[i, "Res"] <- "r"
+  }
+}
 
 
 #### Remove Rep 9
@@ -147,11 +189,11 @@ missingReps <- chemData %>% dplyr::filter(Treatment == "Both")
 with(missingReps, table(Rep, Week, Res))
 
 #### Save chemistry data
-saveRDS(chemData, "output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+saveRDS(chemData, "output/full_phenolic_data_pdr1_2017.rds")
 
 
 #### How many pre-trial samples do I have?
-chemData <- readRDS("output/full_phenolic_and_volatile_data_pdr1_2017.rds")
+chemData <- readRDS("output/full_phenolic_data_pdr1_2017.rds")
 chemData %>% dplyr::filter(Treatment == "BothPre") %>% with(., table(Week, Res))
 ## Not many
 

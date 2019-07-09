@@ -487,13 +487,14 @@ ggsave(filename = "results/figures/elastic_net_coefficients_both_years_plots.tif
 
 #####################################################################################################
 #####################################################################################################
-#### Analysis of phytochemsitry data -- phenolics and volatiles
+#### Analysis of phytochemsitry data -- phenolics only
 #####################################################################################################
 
 #### Cleaning dataset
 phenPrefTransData <- readRDS("output/chemistry_preference_transmission_dataset.rds")
 summary(phenPrefTransData)
 with(phenPrefTransData, table(trt, week))
+
 
 #### Code for choices
 # p1, mu1 = source plant
@@ -506,7 +507,7 @@ pptData <- phenPrefTransData %>% mutate(logp1 = log(p1), logmu1 = log(mu1)) %>% 
 
 
 ######################################################################################################
-#### MANOVA of total phenolics and volatiles between resistant and susceptible vines
+#### MANOVA of total phenolics between resistant and susceptible vines
 ## Set up formula
 manovaDF <- phenPrefTransData %>% dplyr::select(week, trt, 25:ncol(phenPrefTransData)) %>% 
   dplyr::filter(., complete.cases(.)) 
@@ -519,14 +520,14 @@ manovaTests <- c("Pillai", "Wilks", "Hotelling-Lawley", "Roy")
 for(i in 1:length(manovaTests)){
   print(summary(manovaMod, test = manovaTests[i]))
 }
-## RESULTS: trt main effect and week:trt interaction are significant
+## RESULTS: trt main effect, week main effect, and week:trt interaction are significant
 summary.aov(manovaMod) ## Univariate ANCOVAs
 
 
 ## Make a data set for plotting
 ## Select only totals, gather into a "long" version, and calculate means and SE for each week-trt combination
 totalchemMeans <- manovaDF %>% dplyr::select(week, trt, contains("total")) %>%
-  gather(key = compound, value = concentration, total.phenolics.stem, total.phenolics.leaf, total.volatiles) %>%
+  gather(key = compound, value = concentration, total.phenolics.stem, total.phenolics.leaf) %>%
   group_by(week, trt, compound) %>% 
   summarise_at("concentration",
                list(~mean(.), se = ~sd(.)/sqrt(length(.)))) %>%
@@ -565,9 +566,11 @@ ggsave("results/figures/2017_figures/total_phytochemicals_timeseries_plot.jpg", 
 #### Principal Component Analysis of chemistry data and transmission data
 
 ## Remove variables of totals and grouped compounds
-pptData <- pptData %>% dplyr::select(-contains("total"), -monoterpenoids, -green.leafy.volatiles,
-                                     -isoprenoids.and.related, -sequiterpenoids, -early.unknowns, -late.unknowns)
+# List for inclusion of volatiles
+# pptData <- pptData %>% dplyr::select(-contains("total"), -monoterpenoids, -green.leafy.volatiles,
+#                                      -isoprenoids.and.related, -sequiterpenoids, -early.unknowns, -late.unknowns)
 
+pptData <- pptData %>% dplyr::select(-contains("total"))
 
 #### PCA ordination plots for each time point
 figList <- pcaWeekList <- pptWeekData <- pcaANOVAList <- goodPCscores <- pvaluesList <- vector("list", length(unique(pptData$week)))
@@ -620,6 +623,9 @@ for(i in 1:length(unique(pptData$week))){
   }
   if(nsig == 1 & pvaluesIndexSorted[1] != 1){
     sigpvals.i <- c(pvaluesIndexSorted[1], 1)
+  }
+  if(nsig == 1 & pvaluesIndexSorted[1] == 1){
+    sigpvals.i <- pvaluesIndexSorted[1:2]
   }
   if(nsig >= 2){
     sigpvals.i <- pvaluesIndexSorted[1:2]
@@ -1112,7 +1118,7 @@ enetBestTuneleave <- enetBestTuneList2 %>% rbindlist() %>% as.data.frame()
 hist(enetBestTuneleave$alpha)
 hist(enetBestTuneleave$lambda)
 ## Get mode of alpha and lambda
-modeTuneleave <- apply(enetBestTuneleave, 2, mfv) %>% t() %>% as.data.frame()
+(modeTuneleave <- apply(enetBestTuneleave, 2, mfv) %>% t() %>% as.data.frame())
 
 #### Combine runs and summarize coefficient estimates
 enetResultsData <- enetResultsList2 %>% rbindlist() %>% as.data.frame()

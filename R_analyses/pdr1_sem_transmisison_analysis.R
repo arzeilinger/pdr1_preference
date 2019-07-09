@@ -239,7 +239,7 @@ semData17 <- transVCPdata %>%
   dplyr::select(test_plant_infection, trtNumeric, week, pd_index, acquisition, XylellaPopulation, mu1, mu2, p1, p2) %>%
   dplyr::filter(complete.cases(.)) %>%
   dplyr::filter(mu2 < 6.5) %>%
-  rename(transmission = test_plant_infection,
+  dplyr::rename(transmission = test_plant_infection,
          resistanceTrait = trtNumeric)
          #XylellaPopulation = xfpop,
          #pd_index = PD_symptoms_index)
