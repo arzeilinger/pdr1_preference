@@ -17,8 +17,6 @@ lapply(my.packages, require, character.only = TRUE)
 ## negative log likelihood (NLL) functions, 
 ## gradient functions, and AIC function
 source("R_functions/consumer_movement_model_source_functions.R")
-# Plotting functions using lattice
-source("R_functions/lattice_plotting_functions.R")
 # factor2numeric() function
 source("R_functions/factor2numeric.R")
 # NLL gradient functions
@@ -49,10 +47,6 @@ totalbugs <- 48*8
 ## Proportion of bugs that died
 totaldead/totalbugs
   
-# Checking out weirdness in S3 trial data
-s3prefdata <- dplyr::filter(prefdata, week == 3, trt == "S")
-dplyr::filter(s3prefdata, time_from_start_hr == 1 | time_from_start_hr == 2)
-
 
 #### Calculate total counts among cages for each week, genotype, and time point
 # n1 = source plant (Xylella infected)
@@ -110,11 +104,11 @@ paramData$se <- sqrt(paramData$variance)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
 
-dplyr::filter(paramData, week.trt == "3S")
-
-dplyr::filter(paramData, week.trt == "12S" | week.trt == "12R")
-testpardat <- dplyr::filter(paramData, week.trt == "12R")
-testpardat
+# dplyr::filter(paramData, week.trt == "3S")
+# 
+# dplyr::filter(paramData, week.trt == "12S" | week.trt == "12R")
+# testpardat <- dplyr::filter(paramData, week.trt == "12R")
+# testpardat
 
 
 #####################################################################################
@@ -203,7 +197,7 @@ cmmPlot16_color <- ggplot(data=plotPars16, aes(x=week, y=estimate, group = choic
   geom_hline(linetype = 2, yintercept = 0) +
   scale_color_manual(values = my_palette) +
   scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = unique(plotPars17$week)) + 
+                     breaks = unique(plotPars16$week)) + 
   scale_y_continuous(name = "Rate (per hour)") +
   #limits = c(0,10)) +
   theme_bw(base_size=18) +
@@ -279,108 +273,13 @@ bgss_counts_plot16
 ggsave("results/figures/2016_figures/pdr1_bgss_counts_time-series_plot_2016.jpg", plot = bgss_counts_plot16,
        width = 14, height = 7, units = "in")
 
-#####################################################################################
-#### Equilibrial probabilities 
-#####################################################################################
-
-sd <- sqrt(test$variance)
-
-p1sim <- simulateData(estimates[1], sd[1])
-p2sim <- simulateData(estimates[2], sd[2])
-mu1sim <- simulateData(estimates[3], sd[3])
-mu2sim <- simulateData(estimates[4], sd[4])
-paramSim <- cbind(p1sim, p2sim, mu1sim, mu2sim)
-
-P1eq.func(as.numeric(paramSim[50,]))
-P1eqsim <- apply(paramSim, 1, P1eq.func)
-
-# Equilibrium equations from Equation A12 in Appendix A of Zeilinger et al. (2014)
-ProbResults <- lapply(unique(paramData$week.trt), function(x) ProbEqmc(paramData[paramData$week.trt == x,]))
-  
-# Add week.trt combination to each element of the list and combine into one data.frame
-for(i in 1:length(ProbResults)){
-  ProbResults[[i]]$week.trt <- levels(cmmData$week.trt)[i]
-} 
-ProbResults <- ProbResults %>% rbindlist() %>% as.data.frame()
-# Restructure data set
-names(ProbResults) <- c("state", "median", "cil", "ciu", "week.trt")
-ProbResults$median <- factor2numeric(ProbResults$median)
-ProbResults$cil <- factor2numeric(ProbResults$cil)
-ProbResults$ciu <- factor2numeric(ProbResults$ciu)
-
-# Add columns for weeks and treatments, and remove 12.2 week trials
-plotProbs <- dplyr::filter(ProbResults, week.trt != "12.2R" & week.trt != "12.2S")
-plotProbs$week <- plotProbs$week.trt %>% str_extract(., "[0-9]+") %>% as.numeric()
-plotProbs$trt <- plotProbs$week.trt %>% str_extract(., "[aA-zZ]+")
-# Split parameter into rate and choice columns, and replace values with more meaningful terms
-plotProbs$choice <- plotProbs$state %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
-  gsub(1, "infected", ., fixed = TRUE) %>%
-  gsub(2, "Xf-free", ., fixed = TRUE)
-plotProbs$latticegroups <- with(plotProbs, paste(trt, choice, sep=" ")) %>% factor()
-plotProbs
-
-write.csv(plotProbs, file = "results/pdr1_cmm_equilibrial_probabilities.csv", row.names = FALSE)
-
-# Create dummy x variable to space out points
-adj <- c(-0.5, -0.25, 0.25, 0.5)
-plotProbs$dummyx <- 0
-for(i in 1:length(levels(plotProbs$latticegroups))){
-  group.i <- levels(plotProbs$latticegroups)[i]
-  data.i <- which(plotProbs$latticegroups == group.i)
-  adj.i <- adj[i]
-  plotProbs$dummyx[data.i] <- plotProbs[plotProbs$latticegroups == group.i,"week"] + adj.i
-}
-
-
-# Rate parameter plots together
-#tiff(filename = "results/figures/pdr1_cmm_rate_parameter_plot.tif")
-# width = 76*2, height = 76, units = "mm", 
-# res = 600, compression = "lzw")
-#  plot.new()
-probabilities_plot <-  with(plotProbs,
-                          xyplot(median ~ dummyx, groups = latticegroups,
-                                 ly = cil, uy = ciu,
-                                 scales = list(col = 1, alternating = 1, tck = c(1, 0), cex = 1.1, relation = "free"),
-                                               # x = list(limits = c(0, 13), at = c(3,8,12),
-                                               #          labels = list(c("","", ""), c(3,8,12))),
-                                               # y = list(limits = list(c(0, 3), c(0, 0.6)),
-                                               #          at = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)),
-                                               #          labels = list(seq(0, 3, by = 1), seq(0, 0.6, by = 0.2)))),
-                                 xlab = list("Weeks post-inoculation", cex = 1.2), 
-                                 ylab = list("Equilibrial probability", cex = 1.2),
-                                 layout = c(1,1), as.table = TRUE, strip = FALSE, pch = c(19, 1, 17, 2),
-                                 type = 'p', cex = 1.2, col = "black", 
-                                 key = list(x = 0.4, y = 0.85, corner = c(0,0),
-                                            text = list(lab = levels(latticegroups)), 
-                                            points = list(pch = c(19, 1, 17, 2), col = "black")), 
-                                 prepanel = prepanel.ci,                      
-                                 panel = function(x, y, ...) {                
-                                   panel.abline(v = unique(as.numeric(x)),  
-                                                col = "white")              
-                                   panel.superpose(x, y, ...)               
-                                 },                                          
-                                 panel.groups = panel.ci))                    
-# ltext(165, 9, "2009", cex = 1.3)
-# ltext(380, 9, "2010", cex = 1.3)
-# mtext(c("A", "B"), side = 3, cex = 1.3, adj = rep(0.06, 2), padj = c(-1.4, 15))
-# mtext(c("C", "D"), side = 3, cex = 1.3, adj = rep(0.64, 2), padj = c(-1.4, 15))
-
-trellis.device(device = "tiff", file = "results/figures/pdr1_cmm_equilibrial_probabilities_plot.tif")
-  print(probabilities_plot)
-dev.off()
 
 
 
 ##########################################################################################################
 #### Estimating rate parameters for each preference cage
 #### To be used in logistic regression model for transmission
-#### Only using the best estimates for each cage; not sure how to incorporate variance
-
-
-# Checking out weirdness in S3 trial data
-s3prefdata <- dplyr::filter(prefdata, week == 3, trt == "S")
-dplyr::filter(s3prefdata, time_from_start_hr == 1 | time_from_start_hr == 2)
-s3prefdata
+#### Only using the best estimates for each cage, ignoring variance
 
 # Add identifier column for each cage
 cmmDataCage <- data.frame("t" = prefdata$time_from_start_hr,
@@ -398,11 +297,11 @@ modelFitsCage <- lapply(levels(cmmDataCage$week.cage), function(x) optimizeCMM(d
 names(modelFitsCage) <- levels(cmmDataCage$week.cage)
 saveRDS(modelFitsCage, file = "output/CMM_optimx_model_selection_output_per_cage.rds")
 
-#modelFits <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
+modelFitsCage <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
 
 #### Extract and organize parameter estimates from all models
+## Note: profile likelihood to calculate variances fails numerous times. Ignore these because variances aren't used for per-cage analyses
 paramResultsCage <- lapply(modelFitsCage, function(x) tryCatch(mleTable(x), error = function(e) NA))
-paramResultsCage <- lapply(modelFitsCage, mleTable)
 
 #### Average results for all good models
 paramAverageCage <- lapply(paramResultsCage, function(x) tryCatch(averageModels(x, dAIC.threshold = 7), error = function(e) NA))
@@ -413,12 +312,12 @@ paramAverageCage2 <- lapply(paramAverageCage,
                                                                 "variance" = rep(NA, 4)) else x)
 
 # Add week.trt combination to each element of the list and combine into one data.frame
-for(i in 1:length(paramAverageCage)){
-  paramAverageCage[[i]]$week.cage <- levels(cmmDataCage$week.cage)[i]
+for(i in 1:length(paramAverageCage2)){
+  paramAverageCage2[[i]]$week.cage <- levels(cmmDataCage$week.cage)[i]
 } 
-paramDataCage <- rbindlist(paramAverageCage) %>% as.data.frame()
-paramDataCage$estimate <- factor2numeric(paramDataCage$estimate)
-paramDataCage$variance <- factor2numeric(paramDataCage$variance)
+paramDataCage2 <- rbindlist(paramAverageCage2) %>% as.data.frame()
+paramDataCage2$estimate <- factor2numeric(paramDataCage2$estimate)
+paramDataCage2$variance <- factor2numeric(paramDataCage2$variance)
 
 saveRDS(paramDataCage, file = "output/CMM_rate_parameters_per_cage.rds")
 
@@ -431,12 +330,12 @@ saveRDS(paramDataCage, file = "output/CMM_rate_parameters_per_cage.rds")
 
 #### Importing data 
 # Import from local .xlsx file
-# prefdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "BGSS_count_data", detectDates = TRUE)
+prefdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "BGSS_count_data", detectDates = TRUE)
 # Import from Googlesheets
-pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-                      visibility = "private")
-prefdataGS <- gs_read(pdr1DataURL, ws = "BGSS_count_data")
-prefdata <- prefdataGS
+# pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
+#                       visibility = "private")
+# prefdataGS <- gs_read(pdr1DataURL, ws = "BGSS_count_data")
+# prefdata <- prefdataGS
 str(prefdata)
 
 # Separate leaf and symptom data from preference count data
@@ -444,22 +343,6 @@ leafdata <- prefdata[,15:ncol(prefdata)]
 prefdata <- prefdata[,1:14]
 prefdata$genotype <- factor(prefdata$genotype)
 head(prefdata)
-
-
-## Max number of BGSS for each trial is 8
-# How many observations have >8 total bugs?
-prefdata <- prefdata %>% dplyr::mutate(total_bgss = xf_plant + test_plant + neutral_space + dead + missing)
-prefdata %>% dplyr::filter(total_bgss > 8)
-# 2-2-007S-2 trials had 9 BGSS in them, by accident. Otherwise, data look good.
-
-
-## Check howm many bugs I have in the freezer
-# This should be roughly the same as the number of bugs at the 4d time point
-freezerBugs <- prefdata %>% dplyr::filter(time_from_start_hr == 96) %>% dplyr::mutate(total_live_bugs = xf_plant + test_plant + neutral_space)
-(totalFreezerBugs <- sum(freezerBugs$total_live_bugs)) 
-# Total freezer bugs = 917
-# Number of extraction plates
-totalFreezerBugs/96
 
 
 ##############################################################################################################
@@ -525,10 +408,6 @@ paramData$estimate <- factor2numeric(paramData$estimate)
 paramData$variance <- factor2numeric(paramData$variance)
 
 #### Calculate SE and 95% CI
-# Some variances are negative, not sure why, but need to fix.
-# Comment on ResearchGate forum (https://www.researchgate.net/post/In_R_how_to_estimate_confidence_intervals_from_the_Hessian_matrix) suggested taking absolute value of of variances
-# Do this for now, but probably need to bootstrap/jackknife
-# Also need to re-think model averaging of parameter estimates overall
 paramData$se <- sqrt(paramData$variance)
 paramData$cil <- with(paramData, estimate - 1.96*se)
 paramData$ciu <- with(paramData, estimate + 1.96*se)
@@ -622,73 +501,8 @@ ggsave("results/figures/2017_figures/pdr1_cmm_rate_parameter_BW_plot_2017.jpg", 
 
 
 
-#####################################################################################
-#### Equilibrial probabilities 
-#####################################################################################
-
-sd <- sqrt(test$variance)
-
-p1sim <- simulateData(estimates[1], sd[1])
-p2sim <- simulateData(estimates[2], sd[2])
-mu1sim <- simulateData(estimates[3], sd[3])
-mu2sim <- simulateData(estimates[4], sd[4])
-paramSim <- cbind(p1sim, p2sim, mu1sim, mu2sim)
-
-P1eq.func(as.numeric(paramSim[50,]))
-P1eqsim <- apply(paramSim, 1, P1eq.func)
-
-# Equilibrium equations from Equation A12 in Appendix A of Zeilinger et al. (2014)
-ProbResults17 <- lapply(unique(plotPars17$week.genotype), function(x) ProbEqmc(plotPars17[plotPars17$week.genotype == x,]))
-
-# Add week.trt combination to each element of the list and combine into one data.frame
-for(i in 1:length(ProbResults17)){
-  ProbResults17[[i]]$week.genotype <- unique(plotPars17$week.genotype)[i]
-} 
-ProbResults17 <- ProbResults17 %>% rbindlist() %>% as.data.frame()
-# Restructure data set
-names(ProbResults17) <- c("state", "median", "se", "cil", "ciu", "week.genotype")
-ProbResults17$median <- factor2numeric(ProbResults17$median)
-ProbResults17$se <- factor2numeric(ProbResults17$se)
-ProbResults17$cil <- factor2numeric(ProbResults17$cil)
-ProbResults17$ciu <- factor2numeric(ProbResults17$ciu)
-
-# Add columns for weeks and treatments, and remove 12.2 week trials
-ProbResults17$week <- tstrsplit(ProbResults17$week.genotype, split = "-")[[1]] %>% as.numeric()
-ProbResults17$genotype <- tstrsplit(ProbResults17$week.genotype, split = "-")[[2]] %>% factor()
-# Split parameter into rate and choice columns, and replace values with more meaningful terms
-ProbResults17$choice <- ProbResults17$state %>% str_extract(., "[0-9]+") %>% as.numeric() %>%
-  gsub(1, "infected", ., fixed = TRUE) %>%
-  gsub(2, "Xf-free", ., fixed = TRUE)
-ProbResults17
-str(ProbResults17)
-
-write.csv(ProbResults17, file = "results/pdr1_cmm_equilibrial_probabilities_2017.csv", row.names = FALSE)
-
-probabilitiesPlot17 <- ggplot(data=ProbResults17, aes(x=week, y=median, group = choice, color = choice)) +
-  #geom_line(aes(linetype=inoc.time, colour = trt), size=1.25) +
-  geom_point(data = ProbResults17, size=3.5, position = position_dodge(width = 0.9)) +
-  geom_errorbar(data = ProbResults17, aes(ymax=median+se, ymin=median-se), width=0.2, position = position_dodge(width = 0.9)) +
-  facet_wrap(~genotype, scales = "fixed", nrow = 1) +
-  geom_hline(linetype = 2, yintercept = 0.5) +
-  scale_color_manual(values = my_palette) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = unique(ProbResults$week)) + 
-  scale_y_continuous(name = "Probability") +
-  #limits = c(0,10)) +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank(),
-        strip.background = element_blank()) 
-
-probabilitiesPlot17
-
-ggsave("results/figures/2017_figures/pdr1_eq_probabilities_plot_2017.jpg", plot = probabilitiesPlot17,
-       width = 14, height = 7, units = "in")
-
-#### Plot raw numbers of bugs over time
+######################################################################################################
+#### Plot raw counts of bugs over time
 plotCounts17 <- cmmData %>% mutate(xf_plant = n1/N, test_plant = n2/N) %>%
   dplyr::select(-n1, -n2, -n3, -t, -N, -week.genotype) %>% 
   gather(., key = "choice", value = "proportion", xf_plant, test_plant)
@@ -764,11 +578,11 @@ modelFitsCage <- lapply(levels(cmmDataCage$cage), function(x) optimizeCMM(dat = 
 names(modelFitsCage) <- levels(cmmDataCage$cage)
 saveRDS(modelFitsCage, file = "output/CMM_2017_optimx_model_selection_output_per_cage.rds")
 
-#modelFits <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
+modelFitsCage <- readRDS("output/CMM_optimx_model_selection_output_per_cage.rds")
 
 #### Extract and organize parameter estimates from all models
 paramResultsCage <- lapply(modelFitsCage, function(x) tryCatch(mleTable(x), error = function(e) NA))
-paramResultsCage <- lapply(modelFitsCage, mleTable)
+#paramResultsCage <- lapply(modelFitsCage, mleTable)
 
 #### Average results for all good models
 paramAverageCage <- lapply(paramResultsCage, function(x) tryCatch(averageModels(x, dAIC.threshold = 7), error = function(e) NA))
@@ -779,19 +593,14 @@ paramAverageCage2 <- lapply(paramAverageCage,
                                                                 "variance" = rep(NA, 4)) else x)
 
 # Add cage identifier to each element of the list and combine into one data.frame
-for(i in 1:length(paramAverageCage)){
-  paramAverageCage[[i]]$cage <- levels(cmmDataCage$cage)[i]
+for(i in 1:length(paramAverageCage2)){
+  paramAverageCage2[[i]]$cage <- levels(cmmDataCage$cage)[i]
 } 
-paramDataCage <- rbindlist(paramAverageCage) %>% as.data.frame()
-paramDataCage$estimate <- factor2numeric(paramDataCage$estimate)
-paramDataCage$variance <- factor2numeric(paramDataCage$variance)
+paramDataCage2 <- rbindlist(paramAverageCage2) %>% as.data.frame()
+paramDataCage2$estimate <- factor2numeric(paramDataCage2$estimate)
+paramDataCage2$variance <- factor2numeric(paramDataCage2$variance)
 
 saveRDS(paramDataCage, file = "output/CMM_2017_rate_parameters_per_cage.rds")
-
-#### Check some of the results
-check1 <- paramDataCage %>% dplyr::filter(grepl("2-2-102R", cage))
-check2 <- paramDataCage %>% dplyr::filter(grepl("14-2-007S", cage))
-
 
 
 #####################################################################################################################

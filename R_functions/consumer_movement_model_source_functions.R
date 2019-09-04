@@ -340,7 +340,7 @@ mleTable <- function(resultsList = resultsList){
         varfull <- c(var[1], var[1], var[2], var[2])
         if(any(var < 0)){
           warning("negative variance calculated, starting browser")
-          browser()
+          #browser()
         }
     } else {
         if(model.name == "p.choice") {
@@ -351,7 +351,7 @@ mleTable <- function(resultsList = resultsList){
             varfull <- c(var[1], var[2], var[3], var[3])
             if(any(var < 0)){
               warning("negative variance calculated, starting browser")
-              browser()
+              #browser()
             }
         } else {
             if(model.name == "mu.choice") {
@@ -362,7 +362,7 @@ mleTable <- function(resultsList = resultsList){
                 varfull <- c(var[1], var[1], var[2], var[3])
                 if(any(var < 0)){
                   warning("negative variance calculated, starting browser")
-                  browser()
+                  #browser()
                 }
             } else {
                 p <- as.numeric(model[,c("p1","p2","p3","p4")]) # Estimates for Free Choice Model
@@ -372,7 +372,7 @@ mleTable <- function(resultsList = resultsList){
                 varfull <- c(var[1], var[2], var[3], var[4])
                 if(any(var < 0)){
                   warning("negative variance calculated, starting browser")
-                  browser()
+                  #browser()
                 }
             }}}
     NLL <- model$value # Negative Log Likelihood estimate

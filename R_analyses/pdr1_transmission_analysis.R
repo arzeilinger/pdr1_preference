@@ -31,23 +31,9 @@ str(transdata)
 
 ######################################################################################################################
 #### Analysis of PD symptom data
-# # Linear model with transformed symptom data
-# boxcox(pd_index+1 ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
-# sympLM <- lm(log(pd_index+1) ~ week*trt*log10(source.cfu.per.g+1), data = transdata)
-# plot(sympLM)
-# summary(sympLM)
 # Ordered logistic regression
 # also called partial odds logistic regression
 transdata$pd_index <- factor(transdata$pd_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
-# olrMod <- polr(pd_index ~ week*trt, data = transdata, Hess = TRUE, method = "logistic")
-# summary(olrMod)
-# # Calculate p values from t statistic
-# olrCoefs <- coef(summary(olrMod))
-# p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
-# (olrCoefs <- cbind(olrCoefs, "p-value" = p))
-# Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
-
-#### Partial odds ordinal logistic regression using rms::lrm function
 transdataDD <- transdata %>% dplyr::select(pd_index, week, trt)
 dd <- datadist(transdataDD)
 options(datadist = "dd")
@@ -61,12 +47,12 @@ summary(lrmMod16, conf.type = "simultaneous")
 sourcexfNB <- glm.nb(source.cfu.per.g ~ week*trt, data = transdata)
 summary(sourcexfNB)
 ## Results are way off, don't make sense. Looks like model fitting didn't work
-## Try quasi-poisson
+## Quasi-poisson
 sourcexfQP <- glm(source.cfu.per.g ~ week*trt, data = transdata, family = "quasipoisson")
 plot(sourcexfQP)
 summary(sourcexfQP)
 tidy(sourcexfQP, conf.int = TRUE)
-## Even though the error variance is highly skewed, the results make sense
+## Even though the error variance is highly skewed, model fit seems best among different options
 
 
 #######################################################################################################
@@ -79,32 +65,6 @@ transSummary <- transdata %>%
             sePD = sd(pd_index_num, na.rm = TRUE)/sqrt(sum(!is.na(pd_index_num))),
             meancfu = mean(log10(source.cfu.per.g+1)),
             secfu = sd(log10(source.cfu.per.g+1))/sqrt(sum(!is.na(source.cfu.per.g))))
-
-# Transmission plot
-transplot <- ggplot(data=transSummary, aes(x=week, y=percInfected)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Percent test plants positive for X. fastidiosa",
-                     limits = c(0,100)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-transplot
-ggsave("results/figures/transmission_line_plot.jpg", plot = transplot,
-       width = 7, height = 7, units = "in")
 
 
 #### Symptoms plot
@@ -126,8 +86,6 @@ symptom16Plot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
         legend.position = "none") 
 
 symptom16Plot
-ggsave("results/figures/pd_symptom_line_plot.jpg", plot = symptom16Plot,
-       width = 7, height = 7, units = "in")
 
 
 #### Xf pops in source plant plot
@@ -149,8 +107,6 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
         legend.position = "none") 
 
 sourcexf16plot
-ggsave("results/figures/source_xf_line_plot_log.jpg", plot = sourcexf16plot,
-       width = 7, height = 7, units = "in")
 
 
 
@@ -176,110 +132,12 @@ xfscatterplot <- ggplot(data=transdata, aes(x=week, y=(source.cfu.per.g/1000000)
         panel.background = element_blank()) 
 
 xfscatterplot
-ggsave("results/figures/source_xf_pop_scatterplot.jpg", plot = xfscatterplot,
-       width = 7, height = 7, units = "in")
-
-
-
-######################################################################################################################
-#### Analyzing acquisition data at the per-vector level, with cage as a random effect
-acqDataVector <- readRDS("output/pdr1_2016_vector_acquisition_dataset.rds")
-str(acqDataVector)
-
-# Analysis of CFU data
-acqMod <- glmer(vectorcfu ~ week*trt + (1|week.cage), data = acqDataVector, family = "poisson")
-summary(acqMod)
-
-# Analysis of infection status
-infectedMod <- glmer(vectorInfectious ~ week*trt + (1|week.cage), data = acqDataVector, family = "binomial")
-plot(simulateResiduals(infectedMod))
-summary(infectedMod)
-
-
-#### Plotting
-## Use transdata data set for plotting, b/c data are at the cage level
-## Mean CFU
-vectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=meancfu)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Xylella CFU/vector") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-vectorxfplot
-ggsave("results/figures/vector_xf_line_plot.jpg", plot = vectorxfplot,
-       width = 7, height = 7, units = "in")
-
-
-## Log mean CFU
-logvectorxfplot <- ggplot(data=acqSummary, aes(x=week, y=logMeancfu)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  geom_errorbar(aes(ymax=logMeancfu+logSEcfu, ymin=logMeancfu-logSEcfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Xylella CFU per vector (log10 transformed)") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-logvectorxfplot
-ggsave("results/figures/vector_xf_line_plot_log.jpg", plot = logvectorxfplot,
-       width = 7, height = 7, units = "in")
-
-
-## Proportion of vectors infected
-propInfectiousplot <- ggplot(acqSummary, aes(x=week, y=meanPercInfected)) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  geom_errorbar(aes(ymax=meanPercInfected+sePercInfected, ymin=meanPercInfected-sePercInfected), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Mean percent vectors positive for X. fastidiosa",
-                     limits = c(0,100)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-propInfectiousplot
-ggsave("results/figures/vector_prop_infectious_line_plot.jpg", plot = propInfectiousplot,
-       width = 7, height = 7, units = "in")
 
 
 
 ##############################################################################################################
 #### Fitting non-linear models to acquisition data
 ##############################################################################################################
-
 
 
 #### Initial parameters
@@ -307,6 +165,9 @@ b.mm0 <- 4 # value of x when y = a/2
 
 
 #### Fitting multiple non-linear models to Resistant and Susceptible trts separately
+## Load acquisition data
+acqDataVector <- readRDS("output/pdr1_2016_vector_acquisition_dataset.rds")
+str(acqDataVector)
 
 ## Summarize data by week and trt
 acqSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
@@ -318,7 +179,7 @@ acqSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
 acqR <- acqSummary16 %>% dplyr::filter(trt == "R")
 acqS <- acqSummary16 %>% dplyr::filter(trt == "S")
 
-#### Fitting resistant line data
+#### Fitting resistant line 2016 data
 vectorRresults16 <- optimizeTransModels(acqR, nbugs = acqR$n)
 (modelSelectR16 <- vectorRresults16[[2]])
 opListR <- vectorRresults16[[1]]
@@ -329,8 +190,6 @@ bestcoefR <- as.list(coef(bestModR))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
 ciR16 <- confint(bestModR)
-# hessR16 <- attr(bestModR, "details")$hessian
-# seR16 <- sqrt(diag(solve(hessR16)))
 ## Using profile method 
 acqParamR16 <- data.frame(dataset = "R16",
                           model = "Ricker",
@@ -338,29 +197,22 @@ acqParamR16 <- data.frame(dataset = "R16",
                           estimate = coef(bestModR),
                           cil = ciR16[,1],
                           ciu = ciR16[,2])
-                          # cil = coef(bestModR) - seR16*1.96,
-                          # ciu = coef(bestModR) + seR16*1.96)
 
 newDatAcqR16 <- data.frame(week = seq(0, 12, length = 101))
 newDatAcqR16$nInfected <- with(newDatAcqR16, bestcoefR$a*week*exp(-bestcoefR$b*week))
-#newDatR$nInfected <- with(newDatR, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 
-#### Fitting susceptible line data
+#### Fitting susceptible line 2016 data
 vectorSresults16 <- optimizeTransModels(acqS, nbugs = acqS$n)
 (modelSelectS16 <- vectorSresults16[[2]])
 opListS <- vectorSresults16[[1]]
 
 # Get model predictions for plotting
-# Multiple models are equivalently good, MM seems the most realistic and lowest AIC
 bestModS <- opListS$rickerOp # Ricker model is the best
 bestcoefS <- as.list(coef(bestModS))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
-ciS16 <- confint(bestModS)
-# hessS16 <- attr(bestModS, "details")$hessian
-# seS16 <- sqrt(abs(diag(solve(hessS16))))
-## Using profile method for CI
+ciS16 <- confint(bestModS) 
 acqParamS16 <- data.frame(dataset = "S16",
                           model = "Ricker",
                           coef = names(coef(bestModS)),
@@ -370,7 +222,6 @@ acqParamS16 <- data.frame(dataset = "S16",
 
 newDatAcqS16 <- data.frame(week = seq(0, 12, length = 101))
 newDatAcqS16$nInfected <- with(newDatAcqS16, bestcoefS$a*week*exp(-bestcoefS$b*week))
-#newDatS$nInfected <- with(newDatS, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
 
 
 #### Plotting results
@@ -413,8 +264,8 @@ vectorplotNL16color <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfect
   # S = Open circles and dashed line
   geom_point(aes(colour = trt), size=3) +
   geom_errorbar(aes(ymax=meanPropInfectious+sePropInfectious, ymin=meanPropInfectious-sePropInfectious), width=0.2) +
-  geom_smooth(data = newDatR16, aes(x=week, y=nInfected), method = "loess", colour = "#F8766D", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatS16, aes(x=week, y=nInfected), method = "loess", colour = "#00BFC4", linetype = 2, se = FALSE) +
+  geom_smooth(data = newDatAcqR16, aes(x=week, y=nInfected), method = "loess", colour = "#F8766D", linetype = 1, se = FALSE) +
+  geom_smooth(data = newDatAcqS16, aes(x=week, y=nInfected), method = "loess", colour = "#00BFC4", linetype = 2, se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Proportion of infectious vectors",
@@ -428,7 +279,6 @@ vectorplotNL16color <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfect
         panel.background = element_blank()) 
 
 vectorplotNL16color
-
 
 ggsave("results/figures/2016_figures/acquisition_non-linear_color_plot_2016.jpg", plot = vectorplotNL16color,
        width = 7, height = 7, units = "in")
@@ -593,26 +443,9 @@ with(transVCPdata, table(week, genotype))
 
 
 ##############################################################################################################
-#### Analysis of PD symptoms using ANCOVA
-# pdMod1 includes week:genotype interaction, which tests for different slopes and intercepts
-# boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
-# # Best transmformation is inverse sqrt; residuals don't look great, but better that with a quasipoisson GLM
-# pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transVCPdata)
-# plot(pdMod1)
-# anova(pdMod1)
-# summary(pdMod1)
-## Analysis of PD symptoms using Partial Odds Logistic Regression
+#### ## Analysis of PD symptoms using Partial Odds Logistic Regression
 transVCPdata$PD_symptoms_index <- factor(transVCPdata$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
 pdData <- transVCPdata %>% dplyr::select(PD_symptoms_index, block, week, genotype) %>% dplyr::filter(complete.cases(.))
-# olrMod <- polr(PD_symptoms_index ~ week + genotype, data = pdData, Hess = TRUE, method = "logistic")
-# summary(olrMod)
-# # Calculate p values from t statistic
-# olrCoefs <- coef(summary(olrMod))
-# p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
-# (olrCoefs <- cbind(olrCoefs, "p-value" = p))
-# Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
-
-## Analysis of PD symptoms using Partial Odds Logistic Regression with lrm function
 dd <- datadist(pdData)
 options(datadist = "dd")
 lrmMod17 <- lrm(PD_symptoms_index ~ block + week*genotype, data = pdData)
@@ -621,14 +454,6 @@ summary(lrmMod17, conf.type = "simultaneous")
 
 ##############################################################################################################
 #### Analysis of Xf pops in source plants
-## Linear model with transformation
-boxcox(xfpop + 1 ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
-# Best transformation is either sqrt or log; go with square root because the residuals look better
-sourcepopMod1 <- lm(sqrt(xfpop) ~ block + week*genotype, data = transVCPdata)
-plot(simulateResiduals(sourcepopMod1))
-## Residuals don't look very good
-summary(sourcepopMod1)
-
 ## Generalized linear model with quasipoisson distribution
 poispopMod1 <- glm(xfpop ~ block + week*genotype, data = transVCPdata, family = "quasipoisson")
 plot(poispopMod1)
@@ -639,9 +464,9 @@ tidy(poispopMod1, conf.int = TRUE)
 ## Negative binomial GLM
 sourcexfNB <- glm.nb(xfpop ~ block + week*genotype, data = transVCPdata)
 summary(sourcexfNB)
-## Results are qualitatively similar to quasipoisson but returns a warning. Quasipoisson also works better for 2016 data; go with that.
+## Results are qualitatively similar to quasipoisson but warning suggests poor fitting. Quasipoisson also works better for both years.
 
-#### NOTE ON ALTERNATIVE MODEL: Removing false negatives and all negatives had negligible effects on results.
+#### NOTE ON ALTERNATIVE MODELS: Removing false negatives and all negatives had negligible effects on results.
 #### These models had reduced significance of week main effect but were otherwise unchanged.
 #### Log10 transformation works better if all negatives are removed
 
@@ -682,9 +507,6 @@ symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
 
 symptom17plot
 
-ggsave("results/figures/2017_figures/pd_line_plot_2017.jpg", plot = symptom17plot,
-       width = 7, height = 7, units = "in")
-
 
 #### Plotting source plant xf populations
 ## Summary
@@ -718,36 +540,6 @@ sourcexf17plot <- ggplot(data=sourceSummary, aes(x=week, y=logxfpop_mean)) +
         legend.position = "none") 
 
 sourcexf17plot
-
-ggsave("results/figures/2017_figures/source_xf_sqrt_line_plot_2017.jpg", plot = sourcexfplot,
-       width = 7, height = 7, units = "in")
-
-
-
-
-#### Plotting raw transmission
-transplot <- ggplot(data=transSummary, aes(x=week, y=propInfected)) +
-  geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
-  geom_point(aes(shape=genotype, colour = trt), size=3.5) +
-  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14)) + 
-  scale_y_continuous(name = "Proportion test plants positive for Xylella",
-                     limits = c(0,1)) +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-transplot
-
-ggsave("results/figures/2017_figures/transmission_line_plot_2017.jpg", plot = transplot,
-       width = 7, height = 7, units = "in")
 
 
 ##############################################################################################################
@@ -804,7 +596,6 @@ bestcoefR <- as.list(coef(bestModR))
 
 ## Estimate confidence intervals for model parameter estimates using profile method and combine data
 ciR17 <- confint(bestModR, method = "quad")
-## Profile method doesn't work, try quadratic approximation
 acqParamR17 <- data.frame(dataset = "R17",
                        model = "Holling_type_IV",
                        coef = names(coef(bestModR)),
@@ -902,30 +693,12 @@ ggsave("results/figures/2017_figures/acquisition_non-linear_color_plot_2017.jpg"
 #############################################################################################
 #### Combining non-linear acquisition model results from both years for paper
 
-#### Plot acquisition dynamics plots for both years as multi-panel figure
-nl_acq_figure <- plot_grid(vectorplotNL16, vectorplotNL17,
-                           align = "h", ncol = 2, nrow = 1, 
-                           labels = c("(a)", "(b)"), label_x = 0.17, label_y = 0.98,
-                           label_size = 10)
-#fig?
-ggsave(filename = "results/figures/nl_acquisition_figure.tiff",
-       plot = nl_acq_figure,
-       width = 14, height = 7, units = "cm", dpi = 300, compression = "lzw")
-
-#### Combine results from analyses for manuscript
+#### Combine results from analyses
 nlModelSelectionList <- list(modelSelectR16,
                              modelSelectS16,
                              modelSelectR17,
                              modelSelectS17)
 names(nlModelSelectionList) <- c("Resistant-2016", "Susceptible-2016", "Resistant-2017", "Susceptible-2017")
-## Fix model names
-for(i in 1:length(nlModelSelectionList)){
-  nlModelSelectionList[[i]] <- with(nlModelSelectionList, ifelse(modelName == "rickerOp", "Ricker",
-                                                                 ifelse(modelName = "holling4Op", "Holling Type IV",
-                                                                        ifelse(modelName = "linearOp", "Linear",
-                                                                               ifelse(modelName = "MMOp", "Michaelis-Menten",
-                                                                                      "Logistic Growth")))))
-}
 
 ## Save parameter estimates to one sheet and all model selection tables to a second sheet of the same workbook
 wb <- createWorkbook()
@@ -1102,7 +875,6 @@ transplotNL17color <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected))
         panel.border = element_rect(colour = "black"),
         panel.background = element_blank()) 
 transplotNL17color
-
 
 ggsave("results/figures/2017_figures/transmission_non-linear_color_plot_2017.jpg", plot = transplotNL17color,
        width = 7, height = 7, units = "in")
