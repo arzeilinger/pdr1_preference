@@ -834,7 +834,22 @@ for(i in 1:length(selectTables)){
 saveWorkbook(wb, file = "results/cmm_model_selection_tables.xlsx", overwrite = TRUE)
 
 
+
+#### Time series of raw BGSS counts for both years
+bgss_count_figure <- plot_grid(bgss_counts_plot16, bgss_counts_plot17,
+                             ncol = 1, nrow = 2,
+                             labels = c("a", "b"), label_size = 10)
+bgss_count_figure
+
+ggsave(filename = "results/figures/bgss_counts_both_years_figure.tiff",
+       plot = bgss_count_figure,
+       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
+## Don't use this version. It's ugly. Just use the separate figures.
+
+
+
 #### Comparing average movement rates between years
 ## 2016 rates
 avgRates16 <- plotPars16 %>% group_by(rate) %>% summarise(mean = mean(estimate))
 avgRates17 <- plotPars17 %>% group_by(rate) %>% summarise(mean = mean(estimate))                                          
+

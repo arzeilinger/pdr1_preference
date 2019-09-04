@@ -39,12 +39,12 @@ str(transdata)
 # Ordered logistic regression
 # also called partial odds logistic regression
 transdata$pd_index <- factor(transdata$pd_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
-olrMod <- polr(pd_index ~ week*trt, data = transdata, Hess = TRUE, method = "logistic")
-summary(olrMod)
-# Calculate p values from t statistic
-olrCoefs <- coef(summary(olrMod))
-p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
-(olrCoefs <- cbind(olrCoefs, "p-value" = p))
+# olrMod <- polr(pd_index ~ week*trt, data = transdata, Hess = TRUE, method = "logistic")
+# summary(olrMod)
+# # Calculate p values from t statistic
+# olrCoefs <- coef(summary(olrMod))
+# p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
+# (olrCoefs <- cbind(olrCoefs, "p-value" = p))
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 #### Partial odds ordinal logistic regression using rms::lrm function
@@ -595,21 +595,21 @@ with(transVCPdata, table(week, genotype))
 ##############################################################################################################
 #### Analysis of PD symptoms using ANCOVA
 # pdMod1 includes week:genotype interaction, which tests for different slopes and intercepts
-boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
-# Best transmformation is inverse sqrt; residuals don't look great, but better that with a quasipoisson GLM
-pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transVCPdata)
-plot(pdMod1)
-anova(pdMod1)
-summary(pdMod1)
+# boxcox((PD_symptoms_index+1) ~ block + week*genotype, data = transVCPdata, lambda = seq(-2, 2, by=0.5))
+# # Best transmformation is inverse sqrt; residuals don't look great, but better that with a quasipoisson GLM
+# pdMod1 <- lm(1/sqrt(PD_symptoms_index + 1) ~ block + week*genotype, data = transVCPdata)
+# plot(pdMod1)
+# anova(pdMod1)
+# summary(pdMod1)
 ## Analysis of PD symptoms using Partial Odds Logistic Regression
 transVCPdata$PD_symptoms_index <- factor(transVCPdata$PD_symptoms_index, ordered = TRUE, levels = c("0", "1", "2", "3", "4", "5"))
 pdData <- transVCPdata %>% dplyr::select(PD_symptoms_index, block, week, genotype) %>% dplyr::filter(complete.cases(.))
-olrMod <- polr(PD_symptoms_index ~ week + genotype, data = pdData, Hess = TRUE, method = "logistic")
-summary(olrMod)
-# Calculate p values from t statistic
-olrCoefs <- coef(summary(olrMod))
-p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
-(olrCoefs <- cbind(olrCoefs, "p-value" = p))
+# olrMod <- polr(PD_symptoms_index ~ week + genotype, data = pdData, Hess = TRUE, method = "logistic")
+# summary(olrMod)
+# # Calculate p values from t statistic
+# olrCoefs <- coef(summary(olrMod))
+# p <- pnorm(abs(olrCoefs[, "t value"]), lower.tail = FALSE)*2
+# (olrCoefs <- cbind(olrCoefs, "p-value" = p))
 # Results: quasi-Poisson model, transformed LM model, and POLR model all give same result -> only week is significant positive 
 
 ## Analysis of PD symptoms using Partial Odds Logistic Regression with lrm function
