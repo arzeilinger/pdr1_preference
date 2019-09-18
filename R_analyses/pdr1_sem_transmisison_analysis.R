@@ -38,11 +38,10 @@ semData17 <- transVCPdata %>%
   dplyr::filter(complete.cases(.)) %>%
   dplyr::filter(mu2 < 6.5) %>%
   dplyr::rename(transmission = test_plant_infection,
-         resistanceTrait = trtNumeric)
-         #XylellaPopulation = xfpop,
-         #pd_index = PD_symptoms_index)
+                resistanceTrait = trtNumeric)
 str(semData17)
 
+#### Fit 2017 data to full set of models and run model selection
 modelSelect17 <- selectSEM(semData17)
 (results17 <- modelSelect17[[1]])
 
