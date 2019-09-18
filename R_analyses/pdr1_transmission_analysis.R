@@ -72,8 +72,8 @@ symptom16Plot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
   geom_line(aes(linetype=trt), size=1.25) +
   geom_point(aes(shape=trt), size=2.5) +
   geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12), limits = c(3,12)) + 
+  scale_x_continuous(name = "", 
+                     breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Mean PD symptom severity index",
                      breaks = seq(0,5,by=1), limits = c(0, 5)) +
   scale_shape_manual(values = c(16,1)) +
@@ -93,8 +93,8 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
   geom_line(aes(linetype=trt), size=1.25) +
   geom_point(aes(shape=trt), size=2.5) +
   geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12), limits = c(3,12)) + 
+  scale_x_continuous(name = "", 
+                     breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Mean Xylella population (log10, CFU/g)",
                      breaks = seq(2,10,by=2), limits = c(2,10)) +
   scale_shape_manual(values = c(16,1)) +
@@ -198,7 +198,7 @@ acqParamR16 <- data.frame(dataset = "R16",
                           cil = ciR16[,1],
                           ciu = ciR16[,2])
 
-newDatAcqR16 <- data.frame(week = seq(0, 12, length = 101))
+newDatAcqR16 <- data.frame(week = seq(0, 12, length = 201))
 newDatAcqR16$nInfected <- with(newDatAcqR16, bestcoefR$a*week*exp(-bestcoefR$b*week))
 
 
@@ -220,7 +220,7 @@ acqParamS16 <- data.frame(dataset = "S16",
                           cil = ciS16[,1],
                           ciu = ciS16[,2])
 
-newDatAcqS16 <- data.frame(week = seq(0, 12, length = 101))
+newDatAcqS16 <- data.frame(week = seq(0, 12, length = 201))
 newDatAcqS16$nInfected <- with(newDatAcqS16, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
 
@@ -240,8 +240,8 @@ vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfectious)
   # S = Open circles and dashed line
   geom_point(aes(shape = trt), size=2) +
   geom_errorbar(aes(ymax=meanPropInfectious+sePropInfectious, ymin=meanPropInfectious-sePropInfectious), width=0.2) +
-  geom_smooth(data = newDatAcqR16, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatAcqS16, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  geom_line(data = newDatAcqR16, aes(x = week, y = nInfected), linetype = 1, colour = "black", lwd = 1.25) +
+  geom_line(data = newDatAcqS16, aes(x = week, y = nInfected), linetype = 2, colour = "black", lwd = 1.25) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Proportion of infectious vectors",
@@ -264,8 +264,8 @@ vectorplotNL16color <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfect
   # S = Open circles and dashed line
   geom_point(aes(colour = trt), size=3) +
   geom_errorbar(aes(ymax=meanPropInfectious+sePropInfectious, ymin=meanPropInfectious-sePropInfectious), width=0.2) +
-  geom_smooth(data = newDatAcqR16, aes(x=week, y=nInfected), method = "loess", colour = "#F8766D", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatAcqS16, aes(x=week, y=nInfected), method = "loess", colour = "#00BFC4", linetype = 2, se = FALSE) +
+  geom_line(data = newDatAcqR16, aes(x = week, y = nInfected), linetype = 1, colour = "#F8766D", lwd = 1.25) +
+  geom_line(data = newDatAcqS16, aes(x = week, y = nInfected), linetype = 1, colour = "#00BFC4", lwd = 1.25) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Proportion of infectious vectors",
@@ -353,7 +353,7 @@ paramR16 <- data.frame(dataset = "R16",
                        ciu = ciR16[,2])
 
 ## Predict propInfected from model
-newDatTransR16 <- data.frame(week = seq(0, 12, length = 101))
+newDatTransR16 <- data.frame(week = seq(0, 12, length = 201))
 newDatTransR16$propInfected <- with(newDatTransR16, bestcoefR$a*week*exp(-bestcoefR$b*week))
 
 #### Fitting susceptible line data
@@ -376,7 +376,7 @@ paramS16 <- data.frame(dataset = "S16",
 nlParamTable <- rbind(paramR16, paramS16)
 
 ## Predict propInfected from model
-newDatTransS16 <- data.frame(week = seq(0, 12, length = 101))
+newDatTransS16 <- data.frame(week = seq(0, 12, length = 201))
 newDatTransS16$propInfected <- with(newDatTransS16, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
 
@@ -387,8 +387,8 @@ transplotNL16 <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
   # R = Circles and solid line
   # S = Triangles and dashed line
   geom_point(aes(shape = trt), size=2) +
-  geom_smooth(data = newDatTransR16, method = "loess", colour = "black", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatTransS16, method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  geom_line(data = newDatTransR16, aes(x = week, y = propInfected), linetype = 1, colour = "black", lwd = 1.25) +
+  geom_line(data = newDatTransS16, aes(x = week, y = propInfected), linetype = 2, colour = "black", lwd = 1.25) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
@@ -410,8 +410,10 @@ transplotNL16color <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected))
   # R = Circles and solid line
   # S = Triangles and dashed line
   geom_point(aes(colour = trt), size=3) +
-  geom_smooth(data = newDatTransR16, method = "loess", colour = ggDefaultColors[1], linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatTransS16, method = "loess", colour = ggDefaultColors[2], linetype = 2, se = FALSE) +
+  geom_line(data = newDatTransR16, aes(x = week, y = propInfected), linetype = 1, colour = ggDefaultColors[1], lwd = 1.25) +
+  geom_line(data = newDatTransS16, aes(x = week, y = propInfected), linetype = 2, colour = ggDefaultColors[1], lwd = 1.25) +
+  # geom_smooth(data = newDatTransR16, method = "loess", colour = ggDefaultColors[1], linetype = 1, se = FALSE) +
+  # geom_smooth(data = newDatTransS16, method = "loess", colour = ggDefaultColors[2], linetype = 2, se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
   scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
@@ -486,8 +488,8 @@ symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
   geom_line(aes(linetype=genotype), colour = "black", size=1.25) +
   geom_point(aes(shape=genotype), colour = "black", size=2.5) +
   geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14), limits = c(2,14)) + 
+  scale_x_continuous(name = "", 
+                     breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "",
                      limits = c(0,5)) +
   # 007 = open circles, dashed line
@@ -503,7 +505,7 @@ symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
         panel.border = element_rect(colour = "black"),
         panel.background = element_blank(),
         legend.justification = c(0,0),
-        legend.position = c(0.1, 0.4))
+        legend.position = c(0.1, 0.3))
 
 symptom17plot
 
@@ -521,8 +523,8 @@ sourcexf17plot <- ggplot(data=sourceSummary, aes(x=week, y=logxfpop_mean)) +
   geom_line(aes(linetype=genotype), colour = "black", size=1.25) +
   geom_point(aes(shape=genotype), colour = "black", size=2.5) +
   geom_errorbar(aes(ymax=logxfpop_mean+logxfpop_se, ymin=logxfpop_mean-logxfpop_se), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14), limits = c(2,14)) + 
+  scale_x_continuous(name = "", 
+                     breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "",
                      breaks = seq(2,10,by=2), limits = c(2,10)) +
   # 007 = open circles, dashed line
@@ -603,7 +605,7 @@ acqParamR17 <- data.frame(dataset = "R17",
                        cil = ciR17[,1],
                        ciu = ciR17[,2])
 
-newDatAcqR17 <- data.frame(week = seq(0, 14, length = 101))
+newDatAcqR17 <- data.frame(week = seq(0, 14, length = 201))
 newDatAcqR17$nInfected <- with(newDatAcqR17, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 
@@ -625,7 +627,7 @@ acqParamS17 <- data.frame(dataset = "S17",
                           cil = ciS17[,1],
                           ciu = ciS17[,2])
 
-newDatAcqS17 <- data.frame(week = seq(0, 14, length = 101))
+newDatAcqS17 <- data.frame(week = seq(0, 14, length = 201))
 newDatAcqS17$nInfected <- with(newDatAcqS17, (bestcoefS$a*week^2)/(bestcoefS$b + bestcoefS$c*week + week^2))
 
 
@@ -645,8 +647,8 @@ vectorplotNL17 <- ggplot(data=vectorSummary2, aes(x=week, y=meanpropInfectious))
   # S = Open circles and dashed line
   geom_point(aes(shape = trt), size=2) +
   geom_errorbar(aes(ymax=meanpropInfectious+sepropInfectious, ymin=meanpropInfectious-sepropInfectious), width=0.2) +
-  geom_smooth(data = newDatAcqR17, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatAcqS17, aes(x=week, y=nInfected), method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  geom_line(data = newDatAcqR17, aes(x = week, y = nInfected), linetype = 1, colour = "black", lwd = 1.25) +
+  geom_line(data = newDatAcqS17, aes(x = week, y = nInfected), linetype = 2, colour = "black", lwd = 1.25) +
   scale_x_continuous(name = "", 
                      breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "",
@@ -669,8 +671,10 @@ vectorplotNL17color <- ggplot(data=vectorSummary2, aes(x=week, y=meanpropInfecti
   # S = Open circles and dashed line
   geom_point(aes(colour = trt), size=3) +
   geom_errorbar(aes(ymax=meanpropInfectious+sepropInfectious, ymin=meanpropInfectious-sepropInfectious), width=0.2) +
-  geom_smooth(data = newDatAcqR17, aes(x=week, y=nInfected), method = "loess", colour = ggDefaultColors[1], linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatAcqS17, aes(x=week, y=nInfected), method = "loess", colour = ggDefaultColors[2], linetype = 2, se = FALSE) +
+  geom_line(data = newDatAcqR17, aes(x = week, y = nInfected), linetype = 1, colour = ggDefaultColors[1], lwd = 1.25) +
+  geom_line(data = newDatAcqS17, aes(x = week, y = nInfected), linetype = 2, colour = ggDefaultColors[2], lwd = 1.25) +
+  # geom_smooth(data = newDatAcqR17, aes(x=week, y=nInfected), method = "loess", colour = ggDefaultColors[1], linetype = 1, se = FALSE) +
+  # geom_smooth(data = newDatAcqS17, aes(x=week, y=nInfected), method = "loess", colour = ggDefaultColors[2], linetype = 2, se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "",
@@ -803,7 +807,7 @@ paramR17 <- data.frame(dataset = "R17",
                        ciu = ciR17[,2])
 
 ## Predict propInfected from model
-newDatTransR17 <- data.frame(week = seq(0, 14, length = 101))
+newDatTransR17 <- data.frame(week = seq(0, 14, length = 201))
 newDatTransR17$propInfected <- with(newDatTransR17, (bestcoefR$a*week^2)/(bestcoefR$b + bestcoefR$c*week + week^2))
 
 
@@ -826,7 +830,7 @@ paramS17 <- data.frame(dataset = "S17",
                        ciu = ciS17[,2])
 
 ## Predict propInfected from model
-newDatTransS17 <- data.frame(week = seq(0, 14, length = 101))
+newDatTransS17 <- data.frame(week = seq(0, 14, length = 201))
 newDatTransS17$propInfected <- with(newDatTransS17, bestcoefS$a*week*exp(-bestcoefS$b*week))
 
 
@@ -838,8 +842,8 @@ transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
   # R = Circles and solid line
   # S = Triangles and dashed line
   geom_point(aes(shape = trt), size=2) +
-  geom_smooth(data = newDatTransR17, method = "loess", colour = "black", linetype = 1, se = FALSE) +
-  geom_smooth(data = newDatTransS17, method = "loess", colour = "black", linetype = 2, se = FALSE) +
+  geom_line(data = newDatTransR17, aes(x = week, y = propInfected), linetype = 1, colour = "black", lwd = 1) +
+  geom_line(data = newDatTransS17, aes(x = week, y = propInfected), linetype = 2, colour = "black", lwd = 1) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "",
@@ -858,12 +862,12 @@ transplotNL17
 
 ## Transmission plot in color
 transplotNL17color <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
-  #geom_line(aes(linetype=genotype, colour = trt), size=1.25) +
   geom_point(aes(colour = trt), size=3) +
-  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   # Defining the colors for the lines based on the default ggplot2 colors and ggplot_build()$data
-  geom_smooth(data = newDatTransR17, method = "loess", colour = "#F8766D", se = FALSE) +
-  geom_smooth(data = newDatTransS17, method = "loess", colour = "#00BFC4", se = FALSE) +
+  geom_line(data = newDatTransR17, aes(x = week, y = propInfected), linetype = 1, colour = ggDefaultColors[1], lwd = 1.25) +
+  geom_line(data = newDatTransS17, aes(x = week, y = propInfected), linetype = 2, colour = ggDefaultColors[2], lwd = 1.25) +
+  # geom_smooth(data = newDatTransR17, method = "loess", colour = "#F8766D", se = FALSE) +
+  # geom_smooth(data = newDatTransS17, method = "loess", colour = "#00BFC4", se = FALSE) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(2,5,8,14), limits = c(0,14)) + 
   scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
@@ -899,13 +903,31 @@ ggsave(filename = "results/figures/pd_source_both_years_figure.tiff",
 
 #### Plot non-linear acquisition and transmission dynamics plots for both years as multi-panel figure
 nl_figure <- plot_grid(vectorplotNL16, vectorplotNL17, transplotNL16, transplotNL17,
-                             align = "h", ncol = 2, nrow = 2, 
-                             labels = c("(a)", "(b)", "(c)", "(d)"), label_x = 0.16, label_y = 0.96,
-                             label_size = 10)
+                       align = "h", ncol = 2, nrow = 2, 
+                       labels = c("(a)", "(b)", "(c)", "(d)"), label_x = 0.16, label_y = 0.96,
+                       label_size = 10)
 
 ggsave(filename = "results/figures/nl_vector_and_transmission_figure.tiff",
        plot = nl_figure,
        width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
+
+
+##############################################################################
+#### Combining PD symptom, Xf pop, and NL transmission results for paper for each year
+#### Giant 8-panel figure
+
+giant_figure <- plot_grid(symptom16Plot, symptom17plot, sourcexf16plot, sourcexf17plot,
+                          vectorplotNL16, vectorplotNL17, transplotNL16, transplotNL17,
+                          align = "h", ncol = 2, nrow = 4, 
+                          labels = paste("(", LETTERS[1:8], ")", sep = ""),
+                          label_x = 0.16, label_y = 0.96,
+                          label_size = 10)
+
+ggsave(filename = "results/figures/pd_symptom_xf_pop_nl_transmission_figure.tiff",
+       plot = giant_figure,
+       width = 14, height = 28, units = "cm", dpi = 300, compression = "lzw")
+
+
 
 #### Combine results from analyses for manuscript
 nlModelSelectionList <- list(modelSelectR16,

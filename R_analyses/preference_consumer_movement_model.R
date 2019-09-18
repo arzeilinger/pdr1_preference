@@ -440,7 +440,7 @@ write.csv(plotPars17, file = "results/pdr1_cmm_rate_parameter_estimates_2017.csv
 plotPars17 <- read.csv("results/pdr1_cmm_rate_parameter_estimates_2017.csv", header = TRUE)
 
 # Prepend zeroes to genotype labels and make a factor
-#plotPars17$genotype <- plotPars17$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
+plotPars17$genotype <- plotPars17$genotype %>% formatC(., width = 3, format = "d", flag = "0") %>% factor()
 
 # Color palette
 my_palette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
@@ -609,7 +609,7 @@ saveRDS(paramDataCage, file = "output/CMM_2017_rate_parameters_per_cage.rds")
 #### Saving CMM rate plots from both years
 cmm_rate_figure <- plot_grid(cmmPlot16, cmmPlot17,
                              ncol = 1, nrow = 2,
-                             labels = c("(a)", "(b)"), label_size = 10)
+                             labels = c("(A)", "(B)"), label_size = 10)
 cmm_rate_figure
 
 ggsave(filename = "results/figures/cmm_rates_both_years_figure.tiff",

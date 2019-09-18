@@ -4,7 +4,7 @@ selectSEM <- function(dat){
   #### Function to run model selection for SEM analysis of transmission data
   ## returns Fisher's C statistics and AICc values
   ## models are ordered by no. parameters in descending order
-  require(piecewiseSEM)
+  require(piecewiseSEM); require(dplyr)
   ## transModel = best hypothesis on processes driving transmission
   transModel <- psem(
     glm(transmission ~ acquisition + p2 + mu2, "binomial", dat),
@@ -86,10 +86,11 @@ selectSEM <- function(dat){
   FCn <- sapply(1:length(outputList), function(x) outputList[[x]]$Cstat$df, simplify = TRUE)
   FCp <- sapply(1:length(outputList), function(x) outputList[[x]]$Cstat$P.Value, simplify = TRUE)
   results <- data.frame(models = modelNames,
-                        aiccScores,
-                        daicc,
-                        FCstat,
-                        FCn,
-                        FCp)
+                        aiccScores, # AICc scores for each model
+                        daicc, # delta AICc
+                        FCstat, # Fisher's C statistic
+                        FCn, # sample size for Fisher's C
+                        FCp) # P-value for Fisher's C
+  results <- arrange(results, daicc)
   return(list(results, outputList))
 }
