@@ -3,7 +3,7 @@
 rm(list = ls())
 # Load packages
 my.packages <- c("tidyr", "dplyr", "data.table", "openxlsx", "ggplot2", "DHARMa",
-                 "MASS", "logistf", "multcomp", "bbmle", "lme4", "googlesheets", "broom")
+                 "MASS", "multcomp", "lme4", "broom")
 lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/factor2numeric.R")
@@ -11,62 +11,47 @@ source("R_functions/standardize.R")
 
 #### Import culturing data
 # reinfdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "Re-infection_culturing_data")
-# Import from Googlesheets
-pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-                      visibility = "private")
-reinfdataGS <- gs_read(pdr1DataURL, ws = "Re-infection_culturing_data")
-
-
-reinfdata <- reinfdataGS
-str(reinfdata)
-summary(reinfdata)
-# Make xf_cfu_per_g a numeric variable and genotype and trt factors
-reinfdata$xf_cfu_per_g <- as.numeric(reinfdata$xf_cfu_per_g)
-reinfdata$genotype <- factor(reinfdata$genotype)
-reinfdata$trt <- factor(reinfdata$trt)
-summary(reinfdata)
-
-#### Where are the NAs?
-reinfdata[is.na(reinfdata$xf_cfu_per_g),]
-# NAs for xf_cfu_per_g are mostly controls and dead plants
-# For sample 9-007S-4, xf_cfu_d0 was too contaminated but d1 and d2 were 0 could be imputed, but I'll remove it
-# Remove NAs and controls
-reinfdata <- reinfdata %>% dplyr::filter(., trt != "CAB-") %>% dplyr::filter(!is.na(xf_cfu_per_g)) 
-# Remove samples cultured on 2017-07-21 because all were negative, something went wrong, not sure what
-reinfdata <- reinfdata %>% dplyr::filter(xf_plant_date_cultured != "2017-07-21")
-
-#### Label infection treatments according to reps
-reinfdata$inoc.time <- factor(with(reinfdata, ifelse(rep <= 4, "inoc1",
-                                                    ifelse(rep >= 9, "inoc2",
-                                                           "inoc1-2"))))
-summary(reinfdata)
-
-#### Do I have positive culture from all of the plants?
-sumcfu <- reinfdata %>% group_by(genotype, rep) %>% summarise(sum = sum(xf_cfu_per_g, na.rm = TRUE))
-print.data.frame(sumcfu)
-
-# Check how many times plants were negative that were positive previously
-reinflist <- reinfdata %>% dplyr::select(week, genotype, rep, xf_cfu_per_g, inoc.time) %>% data.table() %>% split(., by = c("rep", "genotype"))
-reinflist
-# Hard to say when zeros were false negatives, can't justify altering them
-
+# str(reinfdata)
+# summary(reinfdata)
+# # Make xf_cfu_per_g a numeric variable and genotype and trt factors
+# reinfdata$xf_cfu_per_g <- as.numeric(reinfdata$xf_cfu_per_g)
+# reinfdata$genotype <- factor(reinfdata$genotype)
+# reinfdata$trt <- factor(reinfdata$trt)
+# summary(reinfdata)
+# 
+# #### Where are the NAs?
+# # Remove NAs and controls
+# reinfdata <- reinfdata %>% dplyr::filter(., trt != "CAB-") %>% dplyr::filter(!is.na(xf_cfu_per_g)) 
+# # Remove samples cultured on 2017-07-21 because all were negative, something went wrong, not sure what
+# reinfdata <- reinfdata %>% dplyr::filter(xf_plant_date_cultured != "2017-07-21")
+# 
+# #### Label infection treatments according to reps
+# reinfdata$inoc.time <- factor(with(reinfdata, ifelse(rep <= 4, "inoc1",
+#                                                     ifelse(rep >= 9, "inoc2",
+#                                                            "inoc1-2"))))
+# summary(reinfdata)
 
 
 ########################################################################################################
 #### Analysis
 #### Analysis of re-infection data using Poisson GLMM
 # Random effect on plantID because of repeated measures -- is very hard to fit though -- need to re-scale
-reinfdata$plantID <- factor(with(reinfdata, paste(genotype, trt, rep, sep = "-")))
-# Re-scale week variable
-reinfdata$std.week <- standardize(reinfdata$week)
-# Remove week == 5 points because I'm lacking data for 092 and 094
-reinfdata <- reinfdata %>% dplyr::filter(week != 5)
+# reinfdata$plantID <- factor(with(reinfdata, paste(genotype, trt, rep, sep = "-")))
+# # Re-scale week variable
+# reinfdata$std.week <- standardize(reinfdata$week)
+# # Remove week == 5 points because I'm lacking data for 092 and 094
+# reinfdata <- reinfdata %>% dplyr::filter(week != 5)
+
+#### Load cleaned data set
+reinfdata <- readRDS("output/cleaned_reinfection_experiment_data.rds")
+str(reinfdata)
+summary(reinfdata)
 
 reinfMod1 <- glmer(xf_cfu_per_g ~ week*genotype + inoc.time + inoc.time:genotype + (1|plantID), data = reinfdata, family = "poisson",
                    control = glmerControl(optimizer = "bobyqa"))
 reinfMod2 <- glmer(xf_cfu_per_g ~ week*trt + inoc.time + inoc.time:trt + (1|plantID), data = reinfdata, family = "poisson",
                    control = glmerControl(optimizer = "bobyqa"))
-plot(simulateResiduals(reinfMod1)) ### Not a good model
+plot(simulateResiduals(reinfMod1)) ### NOT A GOOD MODEL
 summary(reinfMod1)
 
 
@@ -190,6 +175,8 @@ reinfplantplot
 ########################################################################################################
 ########################################################################################################
 #### Analysis and plotting of just 2nd inoculation (weeks 21 and 26) using ANCOVA
+#### Used this analysis in Wallis et al. phytochemistry paper
+
 inoc2dat <- reinfdata %>% dplyr::filter(week >= 21 & inoc.time != "inoc1")
 summary(inoc2dat)
 
@@ -254,40 +241,3 @@ meaninoc2plot
 ggsave("results/figures/2017_figures/reinfection_inoc2_line_plot_2017.jpg", plot = meaninoc2plot,
        width = 7, height = 7, units = "in")
 
-
-
-####################################################################################################
-#### Cleaning up data set for Chris Wallis
-
-pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-                      visibility = "private")
-reinfdataGS <- gs_read(pdr1DataURL, ws = "Re-infection_culturing_data")
-
-
-reinfdata <- reinfdataGS
-str(reinfdata)
-summary(reinfdata)
-# Make xf_cfu_per_g a numeric variable and genotype and trt factors
-reinfdata$xf_cfu_per_g <- as.numeric(reinfdata$xf_cfu_per_g)
-reinfdata$genotype <- factor(reinfdata$genotype)
-reinfdata$trt <- factor(reinfdata$trt)
-summary(reinfdata)
-
-#### Where are the NAs?
-reinfdata[is.na(reinfdata$xf_cfu_per_g),]
-# NAs for xf_cfu_per_g are mostly controls and dead plants
-# For sample 9-007S-4, xf_cfu_d0 was too contaminated but d1 and d2 were 0 could be imputed, but I'll remove it
-
-## For Chris' analysis, he only needs genotypes 092 and 094, as these were the only to get assayed for phytochemistry 
-## Also remove unnecessary columns
-reinfdataCW <- reinfdata %>% 
-  dplyr::filter(., genotype == "092" | genotype == "094") %>%
-  dplyr::select(week, genotype, trt, rep, xf_plant_date_cultured, xf_cfu_per_g, notes)
-
-#### Label infection treatments according to reps
-reinfdataCW$inoc.time <- factor(with(reinfdataCW, ifelse(rep <= 4, "inoc1",
-                                                         ifelse(rep >= 9, "inoc2",
-                                                                "inoc1-2"))))
-summary(reinfdataCW)
-
-write.csv(reinfdataCW, "output/xf_populations_for_Chris.csv", row.names = FALSE)

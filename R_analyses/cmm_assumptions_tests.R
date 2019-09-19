@@ -5,7 +5,7 @@ rm(list = ls())
 # loading dtplyr that replaces dplyr and data.table
 my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "data.table",
                  "lattice", "optimx", "bbmle", "numDeriv", "stringr",
-                 "googlesheets", "survival")
+                 "survival")
 lapply(my.packages, require, character.only = TRUE)
 
 ## Input functions for P1 and P2 equations, 
@@ -21,15 +21,15 @@ source("R_functions/cmm_gradient_functions.R")
 ########################################################################################################################################
 #### Importing data 
 # Import from local .xlsx file
-# prefdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "BGSS_count_data", detectDates = TRUE)
+atdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "assumptions_test", detectDates = TRUE)
 # Import from Googlesheets
-pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-                      visibility = "private")
-atdataGS <- gs_read(pdr1DataURL, ws = "assumptions_test")
+# pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
+#                        visibility = "private")
+# atdataGS <- gs_read(pdr1DataURL, ws = "assumptions_test")
 ## Remove extraneous columns
 ## I can remove week, block, genotype, trt because they are all the same
 ## rep column distinguishes different trials, need to keep
-atdata <- atdataGS %>% dplyr::select(rep, time_from_start_hr, xf_plant, test_plant, neutral_space, dead, missing)
+atdata <- atdata %>% dplyr::select(rep, time_from_start_hr, xf_plant, test_plant, neutral_space, dead, missing)
 str(atdata)
 print.data.frame(atdata)
 
@@ -132,9 +132,9 @@ dev.off()
 
 
 #### Contingency table
-cchoiceData <- gs_read(pdr1DataURL, ws = "choice_contingency_table")
+cchoiceData <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "choice_contingency_table", detectDates = TRUE)
 str(cchoiceData)
-ctable <- with(cchoiceData, table(choice1, choice2))
+(ctable <- with(cchoiceData, table(choice1, choice2)))
 ## Too few movement events from the assumptions test for contingency table
 
 
