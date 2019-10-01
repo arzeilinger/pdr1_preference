@@ -74,7 +74,7 @@ symptom16Plot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
   geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Mean PD symptom severity index",
+  scale_y_continuous(name = "PD symptom severity index",
                      breaks = seq(0,5,by=1), limits = c(0, 5)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=8) +
@@ -95,7 +95,7 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
   geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Mean Xylella population (log10, CFU/g)",
+  scale_y_continuous(name = "X. fastidiosa population size (log10, CFU/g)",
                      breaks = seq(2,10,by=2), limits = c(2,10)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=8) +
@@ -244,7 +244,7 @@ vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfectious)
   geom_line(data = newDatAcqS16, aes(x = week, y = nInfected), linetype = 2, colour = "black", lwd = 1.25) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Proportion of infectious vectors",
+  scale_y_continuous(name = "Proportion vectors positive for X. fastidiosa",
                      breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=8) +
@@ -268,7 +268,7 @@ vectorplotNL16color <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfect
   geom_line(data = newDatAcqS16, aes(x = week, y = nInfected), linetype = 1, colour = "#00BFC4", lwd = 1.25) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Proportion of infectious vectors",
+  scale_y_continuous(name = "Proportion vectors positive for X. fastidiosa",
                      breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=18) +
