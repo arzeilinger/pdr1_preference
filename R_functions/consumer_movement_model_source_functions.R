@@ -1,8 +1,8 @@
 #### Functions for Parameter Estimation using Maximum Likelihood Estimation
 
 # Source external scripts
-source("R_functions/factor2numeric.R")
-source("R_functions/simulateData.R")
+#source("R_functions/factor2numeric.R")
+#source("R_functions/simulateData.R")
 
 #### AICc function for optimx objects
 aicc <- function(k, L, n){
