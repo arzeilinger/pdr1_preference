@@ -14,3 +14,5 @@ Within R_analyses directory:
 6) "pdr1_synthesis_analyses.R" contains code for elastic net algorithm fitting of plant phenolic data.
 
 Analyses for the paper "Plant defense against a pathogen drives non-linear transmission dynamics through both vector preference and acquisition" (Ecosphere 2021) can be found in scrips 1), 2), 3), and 5).
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4547775.svg)](https://doi.org/10.5281/zenodo.4547775)
