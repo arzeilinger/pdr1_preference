@@ -31,6 +31,7 @@ source("R_functions/cmm_gradient_functions.R")
 #### Importing data 
 
 prefdata <- read.xlsx("data/2016_data/pdr1_preference_data.xlsx", sheet = "data")
+#write.csv(prefdata, "output/pdr1_preference_2016_data.csv", row.names = FALSE)
 str(prefdata)
 
 # Separate leaf and symptom data from preference count data
@@ -227,7 +228,7 @@ cmmPlot16 <- ggplot(data=plotPars16, aes(x=week, y=estimate, group = choice, sha
                      breaks = unique(plotPars16$week)) + 
   scale_y_continuous(name = "Rate (per hour)") +
   #limits = c(0,10)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=12) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -331,6 +332,7 @@ saveRDS(paramDataCage, file = "output/CMM_rate_parameters_per_cage.rds")
 #### Importing data 
 # Import from local .xlsx file
 prefdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "BGSS_count_data", detectDates = TRUE)
+#write.csv(prefdata, file = "output/pdr1_preference_2017_data.csv", row.names = FALSE)
 # Import from Googlesheets
 # pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
 #                       visibility = "private")
@@ -485,7 +487,7 @@ cmmPlot17 <- ggplot(data=plotPars17, aes(x=week, y=estimate, group = choice, sha
                      breaks = unique(plotPars17$week)) + 
   scale_y_continuous(name = "Rate (per hour)") +
   #limits = c(0,10)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=12) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -614,7 +616,7 @@ cmm_rate_figure
 
 ggsave(filename = "results/figures/cmm_rates_both_years_figure.tiff",
        plot = cmm_rate_figure,
-       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
+       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw")
 
 
 #### Saving model selection tables for both years

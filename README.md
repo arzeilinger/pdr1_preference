@@ -12,3 +12,5 @@ Within R_analyses directory:
 4) "pdr1_reinfection_analysis.R" contains code for analysis of reinfection experiment data reported in Wallis et al. paper on phytochemistry
 5) "cmm_assumptions_tests.R" contains code for testing of assumtions of the Consumer Movement Model.
 6) "pdr1_synthesis_analyses.R" contains code for elastic net algorithm fitting of plant phenolic data.
+
+Analyses for the paper "Plant defense against a pathogen drives non-linear transmission dynamics through both vector preference and acquisition" (Ecosphere 2021) can be found in scrips 1), 2), 3), and 5).

@@ -14,6 +14,7 @@ source("R_functions/nll_functions_pdr1.R")
 
 ## Specifications for ggplot2 default colors
 ggDefaultColors <- c("#F8766D", "#00BFC4")
+baseTextSize <- 16
 
 
 ######################################################################################################################
@@ -24,6 +25,7 @@ ggDefaultColors <- c("#F8766D", "#00BFC4")
 #### Load combined and filtered transmission/preference data set
 # Remove second 12-week set of trials
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
+#write.csv(transdata, file = "output/pdr1_transmission_preference_dataset.csv", row.names = FALSE)
 transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
 transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
 transdata$trt <- factor(transdata$trt)
@@ -77,7 +79,7 @@ symptom16Plot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
   scale_y_continuous(name = "PD symptom severity index",
                      breaks = seq(0,5,by=1), limits = c(0, 5)) +
   scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -95,10 +97,10 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
   geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "X. fastidiosa population size (log10, CFU/g)",
+  scale_y_continuous(name = "Xf population size (log10, CFU/g)",
                      breaks = seq(2,10,by=2), limits = c(2,10)) +
   scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -167,10 +169,12 @@ b.mm0 <- 4 # value of x when y = a/2
 #### Fitting multiple non-linear models to Resistant and Susceptible trts separately
 ## Load acquisition data
 acqDataVector <- readRDS("output/pdr1_2016_vector_acquisition_dataset.rds")
+#acqDataVector %>% ungroup() %>% write.csv(., "output/pdr1_2016_vector_acquisition_dataset.csv", row.names = FALSE)
 str(acqDataVector)
 
 ## Summarize data by week and trt
-acqSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
+acqSummary16 <- acqDataVector %>% ungroup() %>%
+  dplyr::filter(!is.na(vectorInfectious)) %>%
   group_by(trt, week) %>% 
   summarise(n = length(vectorInfectious),
             nInfected = sum(vectorInfectious),
@@ -226,7 +230,8 @@ newDatAcqS16$nInfected <- with(newDatAcqS16, bestcoefS$a*week*exp(-bestcoefS$b*w
 
 #### Plotting results
 ## Calculate mean infectiousness for each trt and week
-vectorSummary16 <- acqDataVector %>% dplyr::filter(!is.na(vectorInfectious)) %>%
+vectorSummary16 <- acqDataVector %>% ungroup() %>% 
+  dplyr::filter(!is.na(vectorInfectious)) %>%
   group_by(trt, week, rep) %>% summarise(propInfectious = sum(vectorInfectious)/length(vectorInfectious)) %>%
   group_by(trt, week) %>% summarise(meanPropInfectious = mean(propInfectious),
                                     nPropInfectious = length(propInfectious),
@@ -244,10 +249,10 @@ vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfectious)
   geom_line(data = newDatAcqS16, aes(x = week, y = nInfected), linetype = 2, colour = "black", lwd = 1.25) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Proportion vectors positive for X. fastidiosa",
+  scale_y_continuous(name = "Prop. vectors infected",
                      breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
   scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -391,10 +396,10 @@ transplotNL16 <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
   geom_line(data = newDatTransS16, aes(x = week, y = propInfected), linetype = 2, colour = "black", lwd = 1.25) +
   scale_x_continuous(name = "Weeks post inoculation", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
+  scale_y_continuous(name = "Prop. test plants infected",
                      breaks = seq(0,1,by=0.2), limits = c(0,1)) +
   scale_shape_manual(values = c(16, 1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -440,6 +445,7 @@ ggsave("results/figures/2016_figures/transmission_non-linear_color_plot_2016.jpg
 ##############################################################################################################
 
 transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
+#write.csv(transVCPdata, file = "output/complete_2017_transmission-preference_dataset.csv", row.names = FALSE)
 str(transVCPdata)
 with(transVCPdata, table(week, genotype))
 
@@ -498,7 +504,7 @@ symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
   # 102 = closed triangles, solid line
   scale_shape_manual(values = c(1,2,16,17)) +
   scale_linetype_manual(values = c(2,2,1,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -533,7 +539,7 @@ sourcexf17plot <- ggplot(data=sourceSummary, aes(x=week, y=logxfpop_mean)) +
   # 102 = closed triangles, solid line
   scale_shape_manual(values = c(1,2,16,17)) +
   scale_linetype_manual(values = c(2,2,1,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -654,7 +660,7 @@ vectorplotNL17 <- ggplot(data=vectorSummary2, aes(x=week, y=meanpropInfectious))
   scale_y_continuous(name = "",
                      breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
   scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -849,7 +855,7 @@ transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
   scale_y_continuous(name = "",
                      breaks = seq(0,1,by=0.2), limits = c(0,1)) +
   scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=8) +
+  theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
@@ -920,12 +926,12 @@ giant_figure <- plot_grid(symptom16Plot, symptom17plot, sourcexf16plot, sourcexf
                           vectorplotNL16, vectorplotNL17, transplotNL16, transplotNL17,
                           align = "h", ncol = 2, nrow = 4, 
                           labels = paste("(", LETTERS[1:8], ")", sep = ""),
-                          label_x = 0.16, label_y = 0.96,
-                          label_size = 10)
+                          label_x = 0.18, label_y = 0.94,
+                          label_size = 14)
 
 ggsave(filename = "results/figures/pd_symptom_xf_pop_nl_transmission_figure.tiff",
        plot = giant_figure,
-       width = 14, height = 28, units = "cm", dpi = 300, compression = "lzw")
+       width = 20, height = 40, units = "cm", dpi = 600, compression = "lzw")
 
 
 
