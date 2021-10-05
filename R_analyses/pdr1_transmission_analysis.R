@@ -76,7 +76,7 @@ symptom16Plot <- ggplot(data=transSummary, aes(x=week, y=meanPD)) +
   geom_errorbar(aes(ymax=meanPD+sePD, ymin=meanPD-sePD), width=0.2) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "PD symptom severity index",
+  scale_y_continuous(name = "PD severity index",
                      breaks = seq(0,5,by=1), limits = c(0, 5)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=baseTextSize) +
@@ -97,7 +97,7 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
   geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
   scale_x_continuous(name = "", 
                      breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Xf population size (log10, CFU/g)",
+  scale_y_continuous(name = "Xf pop. size (log10, CFU/g)",
                      breaks = seq(2,10,by=2), limits = c(2,10)) +
   scale_shape_manual(values = c(16,1)) +
   theme_bw(base_size=baseTextSize) +
@@ -502,8 +502,8 @@ symptom17plot <- ggplot(data=pdSummary, aes(x=week, y=meanPD)) +
   # 092 = open triangles, dashed line
   # 094 = closed circles, solid line
   # 102 = closed triangles, solid line
-  scale_shape_manual(values = c(1,2,16,17)) +
-  scale_linetype_manual(values = c(2,2,1,1)) +
+  scale_shape_manual(NULL, values = c(1,2,16,17)) +
+  scale_linetype_manual(NULL, values = c(2,2,1,1)) +
   theme_bw(base_size=baseTextSize) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.major = element_blank(),
@@ -926,12 +926,12 @@ giant_figure <- plot_grid(symptom16Plot, symptom17plot, sourcexf16plot, sourcexf
                           vectorplotNL16, vectorplotNL17, transplotNL16, transplotNL17,
                           align = "h", ncol = 2, nrow = 4, 
                           labels = paste("(", LETTERS[1:8], ")", sep = ""),
-                          label_x = 0.18, label_y = 0.94,
+                          label_x = 0.22, label_y = 0.94,
                           label_size = 14)
 
 ggsave(filename = "results/figures/pd_symptom_xf_pop_nl_transmission_figure.tiff",
        plot = giant_figure,
-       width = 20, height = 40, units = "cm", dpi = 600, compression = "lzw")
+       width = 16, height = 32, units = "cm", dpi = 600, compression = "lzw")
 
 
 

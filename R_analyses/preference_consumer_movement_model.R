@@ -616,7 +616,7 @@ cmm_rate_figure
 
 ggsave(filename = "results/figures/cmm_rates_both_years_figure.tiff",
        plot = cmm_rate_figure,
-       width = 15, height = 15, units = "cm", dpi = 600, compression = "lzw")
+       width = 10, height = 10, units = "cm", dpi = 600, compression = "lzw")
 
 
 #### Saving model selection tables for both years
