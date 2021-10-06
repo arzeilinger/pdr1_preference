@@ -7,13 +7,13 @@ my.packages <- c("data.table", "openxlsx", "MASS", "googlesheets",
                  "rms", "tidyr", "dplyr")
 lapply(my.packages, require, character.only = TRUE)
 
+## Load functions
 source("R_functions/factor2numeric.R")
-# Load NLL functions for all models
+# Load Negative Log-Likelihood functions for all models
 source("R_functions/nll_functions_pdr1.R")
 
 
-## Specifications for ggplot2 default colors
-ggDefaultColors <- c("#F8766D", "#00BFC4")
+## Specifications for ggplot2 text size
 baseTextSize <- 16
 
 
@@ -23,9 +23,8 @@ baseTextSize <- 16
 ######################################################################################################################
 
 #### Load combined and filtered transmission/preference data set
-# Remove second 12-week set of trials
+# Remove second 12-week set of trials as these were designed differently
 transdata <- readRDS("output/pdr1_transmission_preference_dataset.rds") %>% dplyr::filter(., week != 12.2)
-#write.csv(transdata, file = "output/pdr1_transmission_preference_dataset.csv", row.names = FALSE)
 transdata$source.cfu.per.g <- as.numeric(transdata$source.cfu.per.g)
 transdata$test.plant.infection <- as.integer(transdata$test.plant.infection)
 transdata$trt <- factor(transdata$trt)
@@ -45,10 +44,7 @@ summary(lrmMod16, conf.type = "simultaneous")
 
 #############################################################################################################
 #### source xf pop
-## Data look overdispesed: try negative binomial GLM (MASS package)
-sourcexfNB <- glm.nb(source.cfu.per.g ~ week*trt, data = transdata)
-summary(sourcexfNB)
-## Results are way off, don't make sense. Looks like model fitting didn't work
+## Data look overdispesed; considered negative binomial but quasi-poisson performs better
 ## Quasi-poisson
 sourcexfQP <- glm(source.cfu.per.g ~ week*trt, data = transdata, family = "quasipoisson")
 plot(sourcexfQP)
@@ -109,31 +105,6 @@ sourcexf16plot <- ggplot(data=transSummary, aes(x=week, y=meancfu)) +
         legend.position = "none") 
 
 sourcexf16plot
-
-
-
-#### Xf pops in source plant plot scatter plot
-xfscatterplot <- ggplot(data=transdata, aes(x=week, y=(source.cfu.per.g/1000000))) +
-  # geom_bar(position=position_dodge(), stat="identity", 
-  #          aes(fill=trt)) +
-  # geom_hline(aes(yintercept=50), linetype="dashed") +
-  #geom_line(aes(linetype=trt), size=1.25) +
-  geom_point(aes(shape=trt), size=2.5) +
-  #geom_errorbar(aes(ymax=meancfu+secfu, ymin=meancfu-secfu), width=0.2) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12)) + 
-  scale_y_continuous(name = "Xylella CFU/g plant tissue (x 1,000,000)") +
-  # ylab("% insects on source plant") + 
-  # ylim(c(0,100)) +
-  # xlab("Weeks post inoculation") +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-xfscatterplot
 
 
 
@@ -263,32 +234,6 @@ vectorplotNL16 <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfectious)
 vectorplotNL16
 
 
-## Vector acquisition plot in color
-vectorplotNL16color <- ggplot(data=vectorSummary16, aes(x=week, y=meanPropInfectious)) +
-  # R = Closed circles and solid line
-  # S = Open circles and dashed line
-  geom_point(aes(colour = trt), size=3) +
-  geom_errorbar(aes(ymax=meanPropInfectious+sePropInfectious, ymin=meanPropInfectious-sePropInfectious), width=0.2) +
-  geom_line(data = newDatAcqR16, aes(x = week, y = nInfected), linetype = 1, colour = "#F8766D", lwd = 1.25) +
-  geom_line(data = newDatAcqS16, aes(x = week, y = nInfected), linetype = 1, colour = "#00BFC4", lwd = 1.25) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Proportion vectors positive for X. fastidiosa",
-                     breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
-  scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-vectorplotNL16color
-
-ggsave("results/figures/2016_figures/acquisition_non-linear_color_plot_2016.jpg", plot = vectorplotNL16color,
-       width = 7, height = 7, units = "in")
-
-
 
 ##############################################################################################################
 #### Non-linear models of transmission
@@ -410,34 +355,6 @@ transplotNL16 <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
 transplotNL16
 
 
-#### 2016 NL Transmission figure in color
-transplotNL16color <- ggplot(data=transSummarynl16, aes(x=week, y=propInfected)) +
-  # R = Circles and solid line
-  # S = Triangles and dashed line
-  geom_point(aes(colour = trt), size=3) +
-  geom_line(data = newDatTransR16, aes(x = week, y = propInfected), linetype = 1, colour = ggDefaultColors[1], lwd = 1.25) +
-  geom_line(data = newDatTransS16, aes(x = week, y = propInfected), linetype = 2, colour = ggDefaultColors[1], lwd = 1.25) +
-  # geom_smooth(data = newDatTransR16, method = "loess", colour = ggDefaultColors[1], linetype = 1, se = FALSE) +
-  # geom_smooth(data = newDatTransS16, method = "loess", colour = ggDefaultColors[2], linetype = 2, se = FALSE) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(3,8,12), limits = c(0,12)) + 
-  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
-                     limits = c(0,1)) +
-  scale_shape_manual(values = c(16, 1)) +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank())
-
-transplotNL16color
-
-
-ggsave("results/figures/2016_figures/transmission_non-linear_color_plot_2016.jpg", plot = transplotNL16color,
-       width = 7, height = 7, units = "in")
-
-
 
 ##############################################################################################################
 ##############################################################################################################
@@ -445,7 +362,6 @@ ggsave("results/figures/2016_figures/transmission_non-linear_color_plot_2016.jpg
 ##############################################################################################################
 
 transVCPdata <- readRDS("output/complete_2017_transmission-preference_dataset.rds")
-#write.csv(transVCPdata, file = "output/complete_2017_transmission-preference_dataset.csv", row.names = FALSE)
 str(transVCPdata)
 with(transVCPdata, table(week, genotype))
 
@@ -472,11 +388,13 @@ tidy(poispopMod1, conf.int = TRUE)
 ## Negative binomial GLM
 sourcexfNB <- glm.nb(xfpop ~ block + week*genotype, data = transVCPdata)
 summary(sourcexfNB)
-## Results are qualitatively similar to quasipoisson but warning suggests poor fitting. Quasipoisson also works better for both years.
 
 #### NOTE ON ALTERNATIVE MODELS: Removing false negatives and all negatives had negligible effects on results.
 #### These models had reduced significance of week main effect but were otherwise unchanged.
 #### Log10 transformation works better if all negatives are removed
+#### Results from negative binomial are qualitatively similar to quasipoisson ...
+#### but warning suggests poor fitting. Quasipoisson also works better for both years.
+
 
 
 ##############################################################################################################
@@ -557,7 +475,7 @@ sourcexf17plot
 ## Remove trials where pre-screen plant was positive and test plant was positive
 badTrials <- with(transVCPdata, which(grepl("PS plant positive", notes) & test_plant_infection == 1))
 transdata2 <- transVCPdata[-badTrials,]
-with(transdata2, table(week, genotype))
+with(transdata2, table(week, genotype)) # Sample size by week and genotype
 
 
 #### Initial parameters
@@ -669,35 +587,6 @@ vectorplotNL17 <- ggplot(data=vectorSummary2, aes(x=week, y=meanpropInfectious))
         legend.position = "none") 
 
 vectorplotNL17
-
-
-#### Vector acquisition non-linear 2017 plot in color
-vectorplotNL17color <- ggplot(data=vectorSummary2, aes(x=week, y=meanpropInfectious)) +
-  # R = Closed circles and solid line
-  # S = Open circles and dashed line
-  geom_point(aes(colour = trt), size=3) +
-  geom_errorbar(aes(ymax=meanpropInfectious+sepropInfectious, ymin=meanpropInfectious-sepropInfectious), width=0.2) +
-  geom_line(data = newDatAcqR17, aes(x = week, y = nInfected), linetype = 1, colour = ggDefaultColors[1], lwd = 1.25) +
-  geom_line(data = newDatAcqS17, aes(x = week, y = nInfected), linetype = 2, colour = ggDefaultColors[2], lwd = 1.25) +
-  # geom_smooth(data = newDatAcqR17, aes(x=week, y=nInfected), method = "loess", colour = ggDefaultColors[1], linetype = 1, se = FALSE) +
-  # geom_smooth(data = newDatAcqS17, aes(x=week, y=nInfected), method = "loess", colour = ggDefaultColors[2], linetype = 2, se = FALSE) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14), limits = c(0,14)) + 
-  scale_y_continuous(name = "",
-                     breaks = seq(0,1,0.2), limits = c(-0.01,1.01)) +
-  scale_shape_manual(values = c(16,1)) +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-
-vectorplotNL17color
-
-
-ggsave("results/figures/2017_figures/acquisition_non-linear_color_plot_2017.jpg", plot = vectorplotNL17color,
-       width = 7, height = 7, units = "in")
 
 
 #############################################################################################
@@ -866,56 +755,11 @@ transplotNL17 <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
 transplotNL17
 
 
-## Transmission plot in color
-transplotNL17color <- ggplot(data=transSummarynl17, aes(x=week, y=propInfected)) +
-  geom_point(aes(colour = trt), size=3) +
-  # Defining the colors for the lines based on the default ggplot2 colors and ggplot_build()$data
-  geom_line(data = newDatTransR17, aes(x = week, y = propInfected), linetype = 1, colour = ggDefaultColors[1], lwd = 1.25) +
-  geom_line(data = newDatTransS17, aes(x = week, y = propInfected), linetype = 2, colour = ggDefaultColors[2], lwd = 1.25) +
-  # geom_smooth(data = newDatTransR17, method = "loess", colour = "#F8766D", se = FALSE) +
-  # geom_smooth(data = newDatTransS17, method = "loess", colour = "#00BFC4", se = FALSE) +
-  scale_x_continuous(name = "Weeks post inoculation", 
-                     breaks = c(2,5,8,14), limits = c(0,14)) + 
-  scale_y_continuous(name = "Proportion test plants positive for X. fastidiosa",
-                     limits = c(0,1)) +
-  theme_bw(base_size=18) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(colour = "black"),
-        panel.background = element_blank()) 
-transplotNL17color
-
-ggsave("results/figures/2017_figures/transmission_non-linear_color_plot_2017.jpg", plot = transplotNL17color,
-       width = 7, height = 7, units = "in")
-
 
 ##############################################################################
 ##############################################################################
 #### Combining figures for paper
 ##############################################################################
-
-#### Plot of symptoms and xf source pops for both years
-pd_source_figure <- plot_grid(symptom16Plot, symptom17plot, sourcexf16plot, sourcexf17plot,
-                              ncol = 2, nrow = 2, hjust = -0.1,
-                              labels = c("(a)", "(b)", "(c)", "(d)"), label_size = 10)
-
-ggsave(filename = "results/figures/pd_source_both_years_figure.tiff",
-       plot = pd_source_figure,
-       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
-
-##############################################################################
-#### Combining NL transmission results for paper 
-
-#### Plot non-linear acquisition and transmission dynamics plots for both years as multi-panel figure
-nl_figure <- plot_grid(vectorplotNL16, vectorplotNL17, transplotNL16, transplotNL17,
-                       align = "h", ncol = 2, nrow = 2, 
-                       labels = c("(a)", "(b)", "(c)", "(d)"), label_x = 0.16, label_y = 0.96,
-                       label_size = 10)
-
-ggsave(filename = "results/figures/nl_vector_and_transmission_figure.tiff",
-       plot = nl_figure,
-       width = 14, height = 14, units = "cm", dpi = 300, compression = "lzw")
 
 
 ##############################################################################
