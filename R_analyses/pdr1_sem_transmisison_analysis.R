@@ -1,4 +1,4 @@
-#### Analysis of PdR1 transmission data using structural equation modeling
+#### Analysis of PdR1 transmission data using structural equation modeling (SEM)
 
 rm(list = ls())
 
@@ -7,6 +7,8 @@ lapply(my.packages, require, character.only = TRUE)
 
 source("R_functions/selectSEM.R")
 
+
+#### NOTES:
 #### For CMM parameters
 ## choice1 = source (Xylella infected) plant
 ## choice2 = test plant
@@ -14,6 +16,7 @@ source("R_functions/selectSEM.R")
 #### Some (controversial) rules of thumb for assessing absolute model fit
 ## Fisher's C small and p-value from chi-squared > 0.05
 
+#### SEM analysis only for 2017 data as sample size in 2016 was not sufficiently large
 
 ##########################################################################################################
 #### 2017 SEM analysis
@@ -46,4 +49,5 @@ modelSelect17 <- selectSEM(semData17)
 (results17 <- modelSelect17[[1]])
 
 ## Best model is noPDModel; attraction and leaving rates without pd_index
+## Use these coefficient estimates for Figure 4 in paper
 modelSelect17[[2]]$noPDModel

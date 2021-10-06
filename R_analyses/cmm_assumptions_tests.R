@@ -2,7 +2,6 @@
 
 rm(list = ls())
 # libraries
-# loading dtplyr that replaces dplyr and data.table
 my.packages <- c("openxlsx", "tidyr", "dplyr", "ggplot2", "data.table",
                  "lattice", "optimx", "bbmle", "numDeriv", "stringr",
                  "survival")
@@ -20,12 +19,7 @@ source("R_functions/cmm_gradient_functions.R")
 
 ########################################################################################################################################
 #### Importing data 
-# Import from local .xlsx file
 atdata <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "assumptions_test", detectDates = TRUE)
-# Import from Googlesheets
-# pdr1DataURL <- gs_url("https://docs.google.com/spreadsheets/d/14uJLfRL6mPrdf4qABeGeip5ZkryXmMKkan3mJHeK13k/edit?usp=sharing",
-#                        visibility = "private")
-# atdataGS <- gs_read(pdr1DataURL, ws = "assumptions_test")
 ## Remove extraneous columns
 ## I can remove week, block, genotype, trt because they are all the same
 ## rep column distinguishes different trials, need to keep
@@ -38,7 +32,7 @@ print.data.frame(atdata)
 #### Survival analysis for constant rate assumption
 #########################################################################################################################################
 
-#### Extract data for survival analysis
+#### Restructure data for survival analysis
 ## Create an empty data.frame for the survival data
 nreps <- length(unique(atdata$rep)) # number of trials/replicates
 survData <- data.frame(rep = rep(NA, nreps),
@@ -49,6 +43,7 @@ survData <- data.frame(rep = rep(NA, nreps),
                        time_from1 = rep(NA, nreps))
 choices <- c("xf_plant", "test_plant", "neutral_space", "dead", "missing")
 
+## For loop to convert to survival analysis data structure
 for(i in 1:nreps){
   rep.i <- atdata[atdata$rep == i,]
   survData$rep[i] <- i
@@ -57,7 +52,7 @@ for(i in 1:nreps){
   survData$choice1[i] <- names(choices.i)[which(choices.i == 1)]
   survData$moved0[i] <- ifelse(is.na(survData$choice1[i]), 0, 1)
   rep.i2 <- rep.i %>% dplyr::filter(rep.i$time_from_start_hr >= survData$time0[i])
-  choice.i2 <- rep.i2 %>% dplyr::select_(survData$choice1[i])
+  choice.i2 <- rep.i2 %>% dplyr::select(all_of(survData$choice1[i]))
   survData$time_from1[i] <- ifelse(any(is.na(choice.i2)), min(rep.i2[which(is.na(choice.i2)), "time_from_start_hr"]), NA) 
   survData$moved_from1[i] <- ifelse(is.na(survData$time_from1[i]), 0, 1)
 }
@@ -84,12 +79,12 @@ str(survData)
 setl.fit = survfit(Surv(time0, moved0) ~ choice1, data = survData) # Calculate K-M survival
 sumsetl <- summary(setl.fit)
 # Extract time, S(t), and choice from the survfit object
-setl.dat <- data.frame(cbind("time" = sumsetl$time,
-                             "surv" = sumsetl$surv,
-                             "choice" = as.character(sumsetl$strata)))
-setl.dat$time <- as.numeric(levels(setl.dat$time))[setl.dat$time]
-setl.dat$surv <- as.numeric(levels(setl.dat$surv))[setl.dat$surv]
-setl.dat$rate <- rep("Attraction", nrow(setl.dat))
+setl.dat <- data.frame("time" = sumsetl$time,
+                       "surv" = sumsetl$surv,
+                       "choice" = as.character(sumsetl$strata)) %>%
+  mutate(time = as.numeric(time),
+         surv = as.numeric(surv),
+         rate = "Attraction")
 
 ## Leaving time
 # Obtaining Kaplan-Meier estimates of (S(t)) and time by plant choice for leaving rates
@@ -98,12 +93,12 @@ setl.dat$rate <- rep("Attraction", nrow(setl.dat))
 leav.fit = survfit(Surv(time_from1, moved_from1) ~ choice1, data = survData) # Calculate K-M survival
 sumleav <- summary(leav.fit)
 # Extract time, S(t), and choice from the survfit object
-leav.dat <- data.frame(cbind("time" = sumleav$time,
-                             "surv" = sumleav$surv,
-                             "choice" = as.character(sumleav$strata)))
-leav.dat$time <- as.numeric(levels(leav.dat$time))[leav.dat$time]
-leav.dat$surv <- as.numeric(levels(leav.dat$surv))[leav.dat$surv]
-leav.dat$rate <- rep("Leaving", nrow(leav.dat))
+leav.dat <- data.frame("time" = sumleav$time,
+                       "surv" = sumleav$surv,
+                       "choice" = as.character(sumleav$strata)) %>%
+  mutate(time = as.numeric(time),
+         surv = as.numeric(surv),
+         rate = "Leaving")
 
 
 #### Combine settling data and leaving data
@@ -111,7 +106,7 @@ survdat2 <- rbind(setl.dat, leav.dat)
 survdat2 <- survdat2[survdat2$surv > 0,] # Remove K-M estimates of 0
 survdat2$log.time <- log(survdat2$time) 
 survdat2$log.surv <- log(-log(survdat2$surv))
-
+survdat2
 
 #### Plot K-M survival estimates vs. time
 cmm_constant_rate_plot <- xyplot(log.surv ~ log.time|choice*rate, data = survdat2, 
@@ -135,14 +130,15 @@ dev.off()
 cchoiceData <- read.xlsx("data/2017_data/PdR1_2017_preference-transmission_experiment_data.xlsx", sheet = "choice_contingency_table", detectDates = TRUE)
 str(cchoiceData)
 (ctable <- with(cchoiceData, table(choice1, choice2)))
-## Too few movement events from the assumptions test for contingency table
+## Too few movement events for contingency table analysis
 
 
 ###############################################################################
+#### Examine correlation matrices from CMM instead for independent choice assumption
 #### 2016 MLE correlation matrices
 corrMat16 <- readRDS("output/cmm_parameter_correlation_matrices_2016.rds")
 
-## Drop week 12.2 trials from output list
+#### Make correlation matrices look pretty for supplementary material
 corrTableList <- lapply(corrMat16, extractCorrelationMatrix)
 
 ## Write all correlation matrices to a single Excel worksheet
@@ -157,14 +153,15 @@ for(i in 1:length(corrTableList)){
 
 
 #### How many correlations across week.genotype combinations are < 0.5?
+## Note: low correlations are double counted but so are the totals, so they cancel each other out in the proportion
 lowcor <- totals <- rep(0, length(corrTableList))
 for(i in 1:length(corrTableList)){
   cor.i <- corrTableList[[i]][,-1]
   lowcor[i] <- sum(cor.i < 0.5)
   totals[i] <- sum(dim(cor.i)) - sum(cor.i == 1)
 }
-proplowcor <- sum(lowcor)/sum(totals)
-proplowcor
+## Total proportion of parameter correlations that are < 0.5
+sum(lowcor)/sum(totals)
 
 
 ###############################################################################

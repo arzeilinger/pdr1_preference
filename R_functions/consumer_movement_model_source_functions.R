@@ -408,74 +408,15 @@ averageModels <- function(modelResults = modelResults, dAIC.threshold = 7){
   modelAverageFunction <- function(x){
     par.name <- x
     var.name <- paste(par.name, "var", sep = "")
-    parAv <- sum(goodModels$wts*goodModels[,par.name])
-    var <- goodModels[,c(var.name)]
-    varAv <- sum(goodModels$wts*(var + (goodModels[,par.name] - parAv)^2))
+    par.estimates <- as.numeric(goodModels[,par.name])
+    parAv <- sum(goodModels$wts*par.estimates)
+    var <- as.numeric(goodModels[,c(var.name)])
+    varAv <- sum(goodModels$wts*(var + (par.estimates - parAv)^2))
     return(c(par.name, parAv, varAv))
   }
   modelAverage <- parNames %>% sapply(., modelAverageFunction, simplify = TRUE) %>% t() %>% as.data.frame()
   names(modelAverage) <- c("parameter", "estimate", "variance")
   return(modelAverage)
-}
-
-
-#########################################################################################################
-#### Equilibrial probabilities and Monte Carlo Simulations
-
-# Functions to calculate equilibrial probabilities
-# Order of rate parameters must be p1, p2, mu1, mu2
-P1eq.func <- function(params){
-  p1 <- params[1]
-  p2 <- params[2]
-  mu1 <- params[3]
-  mu2 <- params[4]
-  P1eq <- (p1*mu2)/(mu1*p2 + mu2*p1 + mu1*mu2)
-  return(P1eq)
-}
-
-P2eq.func <- function(params){
-  p1 <- params[1]
-  p2 <- params[2]
-  mu1 <- params[3]
-  mu2 <- params[4]
-  P2eq <- (p2*mu1)/(mu1*p2 + mu2*p1 + mu1*mu2)
-  return(P2eq)
-}
-
-
-#### Function to generate distributions of each rate parameter and calculate median and CI for P1* and P2*
-# Assumes a normal distribution of the likelihood surface around the parameter estimates
-# Which is a valid assumption if the estimates are at or near the global minimum
-# Same assumption as Quadratic Approximation to calculate variances
-
-ProbEqmc <- function(data, parColumn = "parameter", estColumn = "estimate", varColumn = "variance", nsim = 10000, nmin = 1000){
-  # data must include a column specifying the rate parameter, a column of parameter estimates, and column of variance estimates 
-  # the names of these columns are then specified by the parColumn, estColumn, and varColumn options, respectively
-  # nsim = number of simulations
-  # nmin = minimum number of final simulations,
-  # nmin used to eliminate negative values and maintain symmetry of normal distributions
-  estimates <- data[,estColumn]
-  sd <- sqrt(data[,varColumn])
-  # Simulate values for all rate parameters
-  parSims <- sapply(1:length(estimates), 
-                    function(x) simulateData(mean = estimates[x], SE = sd[x], nsim = nsim, nmin = nmin),
-                    simplify = TRUE)
-  # Calculate P1* distribution and summary statistics
-  P1sim <- apply(parSims, 1, function(x) P1eq.func(as.numeric(x)))
-  P1median <- median(P1sim)
-  P1se <- sqrt(var(P1sim))
-  P1cil <- quantile(P1sim, 0.025)
-  P1ciu <- quantile(P1sim, 0.975)
-  P1res <- c("P1", P1median, P1se, P1cil, P1ciu)
-  # Calculate P2* distribution and summary statistics
-  P2sim <- apply(parSims, 1, function(x) P2eq.func(as.numeric(x)))
-  P2median <- median(P2sim)
-  P2se <- sqrt(var(P2sim))
-  P2cil <- quantile(P2sim, 0.025)
-  P2ciu <- quantile(P2sim, 0.975)
-  P2res <- c("P2", P2median, P2se, P2cil, P2ciu)
-  output <- as.data.frame(rbind(P1res, P2res))
-  return(output)
 }
 
 
