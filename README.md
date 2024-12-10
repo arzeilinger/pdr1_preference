@@ -1,4 +1,4 @@
-Scripts for analyses for publication Zeilinger et al. (2021) “Plant defense against a pathogen drives nonlinear transmission....” Ecosphere.
+Scripts for analyses for publication [Zeilinger et al. (2021) “Plant defense against a pathogen drives nonlinear transmission dynamics through both vector preference and acquisition” <i>Ecosphere</i>](https://doi.org/10.1002/ecs2.3505).
 
 Data are from an experiment testing the effect of a disease-resistant grape cultivar (PdR1) on feeding preference by insect vectors, Blue-green sharpshooter (or BGSS), and on transmission of the pathogen Xylella fastidiosa (Xf). Experiment was repeated over two years, 2016 and 2017.
 
